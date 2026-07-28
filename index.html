@@ -1,0 +1,2484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Room Schedule Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f4f2ee;
+    --surface: #ffffff;
+    --border: #e0dbd2;
+    --text: #1a1714;
+    --text-muted: #7a746c;
+    --accent: #2d6a4f;
+    --accent-light: #e8f4ef;
+    --accent-mid: #b8dccb;
+    --danger: #c1440e;
+    --danger-light: #fdf0eb;
+    --weekend: #6b4fa0;
+    --weekend-light: #f0ebfb;
+    --shadow: 0 2px 8px rgba(0,0,0,0.07);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.14);
+    --radius: 10px;
+    --header-h: 60px;
+    --hint-h: 36px;
+    --room-label-w: 155px;
+    --time-col-w: 72px;
+    --slot-h: 52px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1.5px solid var(--border);
+    padding: 0 20px; height: var(--header-h);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .topbar h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+  .topbar h1 span { color: var(--accent); }
+  .day-tabs { display: flex; gap: 3px; }
+  .day-tab {
+    padding: 6px 13px; border-radius: 6px; border: 1.5px solid transparent;
+    font-size: 0.79rem; font-weight: 500; cursor: pointer;
+    transition: all .15s; background: none; color: var(--text-muted); font-family: inherit;
+    position: relative;
+  }
+  .day-tab:hover { background: var(--accent-light); color: var(--accent); }
+  .day-tab.active { background: var(--accent); color: #fff; }
+  .day-tab.weekend { }
+  .day-tab.weekend:hover { background: var(--weekend-light); color: var(--weekend); }
+  .day-tab.weekend.active { background: var(--weekend); color: #fff; }
+  .day-tab .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--danger);
+    position: absolute; top: 4px; right: 4px;
+    display: none;
+  }
+  .day-tab .dot.show { display: block; }
+  .spacer { flex: 1; }
+  .btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border-radius: 8px; border: none;
+    font-size: 0.8rem; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: all .15s; white-space: nowrap;
+  }
+  .btn-outline { background: none; border: 1.5px solid var(--border); color: var(--text-muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #245a41; }
+
+  /* ── HINT BAR ── */
+  .hintbar {
+    background: #fffdf8; border-bottom: 1px solid var(--border);
+    height: var(--hint-h);
+    display: flex; align-items: center; padding: 0 20px; gap: 20px;
+    font-size: 0.72rem; color: var(--text-muted);
+  }
+  .hint-item { display: flex; align-items: center; gap: 5px; }
+  .hint-icon { font-size: 0.85rem; }
+  #undoBar {
+    display: none; background: #1a1714; color: #fff;
+    padding: 10px 20px; font-size: 0.82rem;
+    align-items: center; gap: 12px; z-index: 200;
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    border-radius: 8px; box-shadow: var(--shadow-lg);
+    animation: slideUp .2s ease;
+  }
+  #undoBar.show { display: flex; }
+  #undoBar button { background: var(--accent); border: none; color: #fff; padding: 4px 12px; border-radius: 5px; cursor: pointer; font-family: inherit; font-size: 0.8rem; }
+  @keyframes slideUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+  /* ── MAIN LAYOUT ── */
+  .main { display: flex; height: calc(100vh - var(--header-h)); }
+
+  /* ── FILTER TABS ── */
+  .filter-tabs { display: flex; gap: 3px; }
+  .filter-tab {
+    padding: 6px 13px; border-radius: 6px; border: 1.5px solid var(--border);
+    font-size: 0.79rem; font-weight: 500; cursor: pointer;
+    background: none; color: var(--text-muted); font-family: inherit;
+    transition: all .15s; white-space: nowrap;
+  }
+  .filter-tab:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+  .filter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+
+  .gym-legend {
+    display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap;
+  }
+  .gym-legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); }
+  .gym-legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  .gym-week-header > div {
+    padding: 8px 10px 6px; font-size: 0.78rem; font-weight: 600;
+    text-align: center; border-right: 1.5px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+  }
+  .gym-day-badge {
+    font-size: 0.65rem; font-weight: 700; color: white;
+    padding: 1px 6px; border-radius: 4px; min-width: 32px; text-align: center;
+  }
+  .gym-day-badge-empty { background: var(--border) !important; color: var(--text-muted); font-weight: 400; }
+  .gym-day-bar-track {
+    height: 3px; width: 80%; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .gym-day-bar-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+  .gym-slot-over {
+    position: absolute; top: 1px; right: 2px;
+    font-size: 0.55rem; color: var(--danger); font-weight: 700; pointer-events: none; z-index: 6;
+  }
+  .gym-util-cell { position: relative; }
+  .classes-block {
+    position: absolute; left: 3px; right: 3px;
+    border-radius: 6px; padding: 5px 8px;
+    background: var(--accent); color: white;
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    overflow: hidden; z-index: 5; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    transition: box-shadow .1s;
+  }
+  .classes-block:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
+  .classes-block-top { display: flex; align-items: center; gap: 4px; }
+  .classes-block-name { font-size: 0.75rem; font-weight: 600; flex: 1; }
+  .classes-block-time { font-size: 0.62rem; opacity: 0.8; font-family: 'DM Mono', monospace; }
+  .classes-block-del {
+    background: rgba(0,0,0,0.15); border: none; border-radius: 4px;
+    font-size: 0.62rem; cursor: pointer; color: white;
+    padding: 1px 4px; opacity: 0; transition: opacity .15s; font-family: inherit;
+  }
+  .classes-block:hover .classes-block-del { opacity: 1; }
+  .classes-add-btn {
+    font-size: 0.62rem; font-weight: 600; padding: 2px 7px;
+    border-radius: 4px; border: 1.5px solid var(--accent-mid);
+    background: var(--accent-light); color: var(--accent);
+    cursor: pointer; font-family: inherit; transition: all .15s; margin-top: 2px;
+  }
+  .classes-add-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* ── GYM VIEW ── */
+  .gym-view-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .gym-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    background: var(--surface); border-radius: var(--radius);
+    border: 1.5px solid var(--border); box-shadow: var(--shadow);
+  }
+  .gym-header-icon { font-size: 1.6rem; }
+  .gym-header h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+  .gym-header p { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
+  .gym-week-grid {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1.5px solid var(--border); box-shadow: var(--shadow);
+    overflow: hidden; min-width: fit-content;
+  }
+  .gym-week-header {
+    display: grid; grid-template-columns: 72px repeat(7, 1fr);
+    background: #faf9f7; border-bottom: 2px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .gym-week-header > div:first-child {
+    padding: 10px; font-weight: 400; color: var(--text-muted); font-size: 0.68rem;
+    text-align: right; align-items: flex-end; justify-content: flex-end;
+    border-right: 1.5px solid var(--border);
+  }
+  .gym-week-header > div:last-child { border-right: none; }
+  .gym-week-header .gym-wknd > div:first-child { color: var(--weekend); }
+  .gym-time-row {
+    display: grid; grid-template-columns: 72px repeat(7, 1fr);
+    border-bottom: 1px solid #ede9e3;
+  }
+  .gym-time-row:last-child { border-bottom: none; }
+  .gym-time-row.gym-hour { border-bottom: 1px solid #d4cfc8; }
+  .gym-time-cell {
+    padding: 5px 9px 0 0; text-align: right;
+    font-size: 0.68rem; font-family: 'DM Mono', monospace;
+    color: var(--text-muted); height: 52px; border-right: 1.5px solid var(--border);
+    flex-shrink: 0;
+  }
+  .gym-time-cell.gym-hour-label { color: var(--text); font-weight: 500; }
+  .gym-day-slot {
+    height: 52px; position: relative;
+    border-right: 1.5px solid var(--border);
+    transition: background .1s;
+  }
+  .gym-day-slot:last-child { border-right: none; }
+  .gym-day-slot.drag-over {
+    background: var(--accent-light);
+    outline: 2px dashed var(--accent-mid); outline-offset: -2px;
+  }
+  /* Gym booking block — horizontal card feel */
+  .gym-booking {
+    position: absolute; left: 3px; right: 3px;
+    border-radius: 7px; padding: 4px 8px;
+    font-size: 0.74rem; font-weight: 500;
+    cursor: grab; display: flex; flex-direction: column; gap: 1px;
+    z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    overflow: hidden; border: 1.5px solid rgba(255,255,255,0.4);
+    user-select: none; transition: box-shadow .1s;
+  }
+  .gym-booking:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.16); z-index: 20; }
+  .gym-booking:active { cursor: grabbing; z-index: 50; }
+  .gym-booking.fortnightly::after {
+    content: ''; position: absolute; inset: 0; border-radius: 6px;
+    background: repeating-linear-gradient(45deg,rgba(255,255,255,0) 0,rgba(255,255,255,0) 6px,rgba(255,255,255,0.22) 6px,rgba(255,255,255,0.22) 9px);
+    pointer-events: none;
+  }
+  .gym-bk-del {
+    background: rgba(0,0,0,0.12); border: none; border-radius: 4px;
+    font-size: 0.62rem; cursor: pointer; color: inherit;
+    padding: 1px 4px; opacity: 0; transition: opacity .15s; font-family: inherit;
+  }
+  .gym-booking:hover .gym-bk-del { opacity: 1; }
+  .gym-bk-resize {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 10px;
+    cursor: ns-resize; border-radius: 0 0 7px 7px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s;
+  }
+  .gym-bk-resize::after {
+    content: ''; display: block; width: 24px; height: 3px;
+    border-radius: 2px; background: currentColor; opacity: 0.35;
+  }
+  .gym-booking:hover .gym-bk-resize { opacity: 1; }
+
+
+  .wv-bg {
+    display: none; position: fixed; inset: 0; z-index: 400;
+    background: rgba(0,0,0,0.45);
+    align-items: flex-start; justify-content: center;
+    padding: 24px 16px; overflow-y: auto;
+  }
+  .wv-bg.open { display: flex; }
+  .wv-modal {
+    background: var(--surface); border-radius: 14px;
+    width: 100%; max-width: 1200px;
+    box-shadow: var(--shadow-lg); animation: popIn .2s ease; overflow: hidden;
+  }
+  .wv-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1.5px solid var(--border);
+    background: #faf9f7; gap: 12px; flex-wrap: wrap;
+  }
+  .wv-header h2 { font-size: 0.95rem; font-weight: 600; }
+  .wv-header-right { display: flex; align-items: center; gap: 8px; }
+  .wv-filter-tabs { display: flex; gap: 3px; }
+  .wv-filter-tab {
+    padding: 5px 11px; border-radius: 6px; border: 1.5px solid var(--border);
+    font-size: 0.74rem; font-weight: 500; cursor: pointer;
+    background: none; color: var(--text-muted); font-family: inherit; transition: all .15s;
+  }
+  .wv-filter-tab:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+  .wv-filter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .wv-close {
+    background: none; border: 1.5px solid var(--border); border-radius: 8px;
+    width: 32px; height: 32px; cursor: pointer; font-size: 1rem; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); transition: all .15s;
+  }
+  .wv-close:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  .wv-table-wrap { overflow-x: auto; padding: 16px; }
+  .wv-table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 0.76rem; }
+  .wv-table th {
+    padding: 8px 12px; text-align: left; font-weight: 600;
+    font-size: 0.72rem; letter-spacing: .04em;
+    border-bottom: 2px solid var(--border); color: var(--text-muted);
+    white-space: nowrap; background: #faf9f7;
+  }
+  .wv-table th.day-th { text-align: center; color: var(--text); font-size: 0.8rem; }
+  .wv-table th.day-th.weekend { color: var(--weekend); }
+  .wv-table td {
+    padding: 6px 8px; border-bottom: 1px solid #f0ede8;
+    vertical-align: top; min-width: 110px;
+  }
+  .wv-table tr:last-child td { border-bottom: none; }
+  .wv-table td.room-td {
+    font-weight: 600; font-size: 0.72rem; white-space: nowrap;
+    color: var(--text-muted); min-width: 80px; padding-left: 12px;
+    border-right: 1.5px solid var(--border);
+  }
+  .wv-table tr:hover td { background: #faf9f7; }
+  .wv-chips { display: flex; flex-direction: column; gap: 3px; }
+  .wv-chip {
+    display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    padding: 3px 7px; border-radius: 5px;
+    font-size: 0.69rem; font-weight: 500; line-height: 1.4;
+    border: 1px solid transparent; position: relative; overflow: hidden;
+  }
+  .wv-chip.fortnightly::after {
+    content: ''; position: absolute; inset: 0; border-radius: 4px;
+    background: repeating-linear-gradient(45deg,rgba(255,255,255,0) 0,rgba(255,255,255,0) 5px,rgba(255,255,255,0.25) 5px,rgba(255,255,255,0.25) 7px);
+    pointer-events: none;
+  }
+  .wv-chip-name { white-space: nowrap; }
+  .wv-chip-time { font-size: 0.61rem; opacity: 0.7; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .wv-chip-fn { font-size: 0.54rem; background: rgba(0,0,0,0.13); padding: 0 3px; border-radius: 2px; font-weight: 700; letter-spacing:.04em; }
+  .wv-empty { color: #ccc; font-size: 0.68rem; }
+  .wv-open-slot {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 8px; border-radius: 5px;
+    font-size: 0.69rem; font-weight: 600;
+    background: #e8e5e1; color: #5a5550;
+    border: 1.5px solid #d0ccc7;
+  }
+  .wv-open-slot-icon { font-size: 0.75rem; }
+  .wv-open-slot-time { font-size: 0.61rem; font-family: 'DM Mono', monospace; opacity: 0.65; }
+  .wv-section-row td {
+    background: var(--bg); font-size: 0.63rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted);
+    padding: 8px 12px 4px; border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-toggle {
+    background: none; border: 1.5px solid var(--border);
+    border-radius: 8px; width: 34px; height: 34px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 1.1rem; color: var(--text-muted);
+    transition: all .15s;
+  }
+  .sidebar-toggle:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 216px; min-width: 216px;
+    background: var(--surface);
+    border-right: 1.5px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+    transition: width .25s ease, min-width .25s ease, opacity .2s ease;
+    position: relative; z-index: 50; flex-shrink: 0;
+  }
+  .sidebar.collapsed {
+    width: 0; min-width: 0; opacity: 0; overflow: hidden; border-right: none;
+  }
+
+  /* Mobile: sidebar becomes an overlay drawer */
+  @media (max-width: 768px) {
+    :root { --header-h: 56px; --hint-h: 0px; --room-label-w: 110px; --time-col-w: 56px; --slot-h: 48px; }
+    .hintbar { display: none; }
+    .topbar { padding: 0 12px; gap: 8px; }
+    .topbar h1 { font-size: 0.9rem; }
+    .day-tabs { gap: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+    .day-tab { padding: 5px 10px; font-size: 0.74rem; flex-shrink: 0; }
+    .btn span { display: none; }
+    .btn { padding: 7px 10px; font-size: 0.85rem; }
+    .topbar .spacer { flex: 1; min-width: 4px; }
+    .sidebar {
+      position: fixed; left: 0; top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      width: 260px; min-width: 260px;
+      z-index: 200; box-shadow: var(--shadow-lg);
+      transform: translateX(0); transition: transform .25s ease;
+    }
+    .sidebar.collapsed {
+      transform: translateX(-100%); width: 260px; min-width: 260px;
+      opacity: 1; overflow-y: auto; border-right: 1.5px solid var(--border);
+    }
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.3); z-index: 190;
+    }
+    .sidebar-overlay.visible { display: block; }
+    .schedule-wrap { padding: 10px 8px; }
+    .room-bar { gap: 6px; }
+    .add-room-row input { width: 120px; }
+    .modal { width: calc(100vw - 32px); max-width: 360px; padding: 20px; }
+  }
+  @media (max-width: 480px) {
+    :root { --room-label-w: 90px; --time-col-w: 48px; }
+    .topbar h1 { display: none; }
+    .day-tab { padding: 5px 8px; font-size: 0.7rem; }
+  }
+  .sidebar-section { padding: 14px 13px 0; }
+  .sidebar-label {
+    font-size: 0.65rem; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--text-muted); padding: 0 2px 8px;
+  }
+  .badge-pool { display: flex; flex-direction: column; gap: 5px; padding-bottom: 10px; }
+  .badge {
+    padding: 9px 11px; border-radius: 8px;
+    font-size: 0.8rem; font-weight: 500;
+    cursor: grab; user-select: none;
+    display: flex; align-items: center; gap: 7px;
+    transition: transform .12s, box-shadow .12s;
+    border: 1.5px solid transparent;
+  }
+  .badge:active { cursor: grabbing; transform: scale(1.04); box-shadow: var(--shadow-lg); }
+  .badge-icon { font-size: 0.75rem; opacity: 0.55; flex-shrink: 0; }
+  .badge-name { flex: 1; }
+  .badge-del {
+    opacity: 0; font-size: 0.68rem; color: rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.1); border-radius: 4px;
+    padding: 1px 5px; cursor: pointer; transition: opacity .15s;
+    border: none; font-family: inherit; flex-shrink: 0;
+  }
+  .badge:hover .badge-del { opacity: 1; }
+  .add-therapist-row { display: flex; gap: 5px; padding: 0 13px 12px; }
+  .add-therapist-row input {
+    flex: 1; padding: 7px 9px; border-radius: 7px;
+    border: 1.5px solid var(--border); font-size: 0.79rem;
+    font-family: inherit; background: var(--bg); color: var(--text); outline: none;
+  }
+  .add-therapist-row input:focus { border-color: var(--accent); }
+  .add-therapist-row button {
+    padding: 7px 11px; border-radius: 7px; border: none;
+    background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; line-height: 1;
+  }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 2px 13px; }
+  .hours-section { padding: 12px 13px; }
+  .hours-row { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .hours-row label { font-size: 0.73rem; color: var(--text-muted); width: 34px; flex-shrink: 0; }
+  .hours-row input[type=time], .hours-row select {
+    flex: 1; padding: 6px 7px; border-radius: 6px;
+    border: 1.5px solid var(--border); font-size: 0.76rem;
+    font-family: 'DM Mono', monospace; background: var(--bg);
+    color: var(--text); outline: none;
+  }
+  .hours-row input[type=time]:focus, .hours-row select:focus { border-color: var(--accent); }
+
+  /* Availability panel */
+  .avail-panel { padding: 12px 13px; }
+  .avail-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .avail-row span { font-size: 0.76rem; color: var(--text-muted); }
+  .avail-row strong { font-size: 0.8rem; }
+  .avail-bar-track { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+  .avail-bar-fill { height: 100%; background: var(--accent); border-radius: 10px; transition: width .4s; }
+  .avail-rooms { display: flex; flex-direction: column; gap: 3px; }
+  .avail-room-row { display: flex; align-items: center; gap: 6px; }
+  .avail-room-name { font-size: 0.7rem; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .avail-room-slots { display: flex; gap: 2px; }
+  .avail-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--border); }
+  .avail-dot.used { background: var(--accent); opacity: 0.75; }
+
+  /* ── SCHEDULE AREA ── */
+  .schedule-wrap { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* Room bar */
+  .room-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .room-bar-label { font-size: 0.73rem; color: var(--text-muted); font-weight: 500; }
+  .add-room-row { display: flex; gap: 5px; }
+  .add-room-row input {
+    padding: 6px 11px; border-radius: 7px;
+    border: 1.5px solid var(--border); font-size: 0.79rem;
+    font-family: inherit; background: var(--surface); outline: none; width: 155px;
+  }
+  .add-room-row input:focus { border-color: var(--accent); }
+
+  /* ── GRID ── */
+  .grid-container {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1.5px solid var(--border); overflow: hidden;
+    box-shadow: var(--shadow); min-width: fit-content;
+  }
+  .grid-header {
+    display: flex; border-bottom: 2px solid var(--border);
+    background: #faf9f7; position: sticky; top: 0; z-index: 10;
+  }
+  .gh-corner { width: var(--time-col-w); min-width: var(--time-col-w); border-right: 1.5px solid var(--border); }
+  .gh-room {
+    min-width: var(--room-label-w); flex: 1; padding: 10px 12px;
+    border-right: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 5px;
+  }
+  .gh-room:last-child { border-right: none; }
+  .room-name-input {
+    border: none; background: none; font-family: inherit;
+    font-size: 0.8rem; font-weight: 600; color: var(--text);
+    outline: none; width: 100%; cursor: text;
+  }
+  .room-name-input:focus { color: var(--accent); }
+  .room-del-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 0.8rem; opacity: 0.4;
+    padding: 2px 4px; border-radius: 4px; transition: all .15s; flex-shrink: 0;
+  }
+  .room-del-btn:hover { opacity: 1; color: var(--danger); background: var(--danger-light); }
+
+  .grid-body { }
+  .time-row { display: flex; border-bottom: 1px solid #ede9e3; }
+  .time-row:last-child { border-bottom: none; }
+  .time-row.hour-marker { border-bottom: 1px solid #d4cfc8; }
+  .time-cell {
+    width: var(--time-col-w); min-width: var(--time-col-w);
+    border-right: 1.5px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: flex-end;
+    padding: 5px 9px 0;
+    font-size: 0.68rem; font-family: 'DM Mono', monospace;
+    color: var(--text-muted); height: var(--slot-h); flex-shrink: 0;
+  }
+  .time-cell.hour { color: var(--text); font-weight: 500; }
+  .room-slot {
+    min-width: var(--room-label-w); flex: 1; height: var(--slot-h);
+    border-right: 1.5px solid var(--border);
+    position: relative; transition: background .1s;
+  }
+  .room-slot:last-child { border-right: none; }
+  .room-slot.drag-over {
+    background: var(--accent-light);
+    outline: 2px dashed var(--accent-mid);
+    outline-offset: -2px;
+  }
+  .room-slot.empty-hint::after {
+    content: '+ drop here';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; color: var(--accent-mid);
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .room-slot.drag-over.empty-hint::after { opacity: 1; }
+
+  /* ── BOOKING BLOCK ── */
+  .booking {
+    position: absolute; left: 3px; right: 3px;
+    border-radius: 7px; padding: 4px 8px;
+    font-size: 0.74rem; font-weight: 500;
+    cursor: grab; display: flex; align-items: flex-start; flex-direction: column;
+    gap: 1px; z-index: 5;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    overflow: hidden; border: 1.5px solid rgba(255,255,255,0.4);
+    user-select: none; transition: box-shadow .1s;
+  }
+  .booking.fortnightly::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 6px;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0) 0px,
+      rgba(255,255,255,0) 6px,
+      rgba(255,255,255,0.22) 6px,
+      rgba(255,255,255,0.22) 9px
+    );
+    pointer-events: none;
+  }
+  .bk-fn-pill {
+    display: inline-flex; align-items: center;
+    font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em;
+    background: rgba(0,0,0,0.15); color: inherit;
+    padding: 1px 5px; border-radius: 3px;
+    flex-shrink: 0; text-transform: uppercase;
+  }
+  /* Fortnightly badge pill in sidebar */
+  .badge-fn-pill {
+    font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em;
+    background: rgba(0,0,0,0.12); color: inherit;
+    padding: 1px 5px; border-radius: 3px;
+    text-transform: uppercase; flex-shrink: 0;
+  }
+  .booking:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.16); z-index: 20; }
+  .booking:active { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); }
+  .bk-top { display: flex; align-items: center; gap: 4px; width: 100%; }
+  .bk-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bk-del {
+    background: rgba(0,0,0,0.12); border: none; border-radius: 4px;
+    font-size: 0.62rem; cursor: pointer; color: inherit;
+    padding: 1px 4px; opacity: 0; transition: opacity .15s; font-family: inherit;
+    flex-shrink: 0;
+  }
+  .booking:hover .bk-del { opacity: 1; }
+  .bk-time { font-size: 0.62rem; opacity: 0.7; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .bk-resize {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 10px;
+    cursor: ns-resize; border-radius: 0 0 7px 7px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s;
+  }
+  .bk-resize::after {
+    content: ''; display: block;
+    width: 24px; height: 3px; border-radius: 2px;
+    background: currentColor; opacity: 0.35;
+  }
+  .booking:hover .bk-resize { opacity: 1; }
+  .booking.resizing { cursor: ns-resize; z-index: 50; box-shadow: var(--shadow-lg); opacity: 0.9; }
+  .resize-ghost {
+    position: absolute; left: 3px; right: 3px; top: 2px;
+    border-radius: 7px; border: 2px dashed;
+    pointer-events: none; z-index: 40; opacity: 0.5;
+  }
+
+  /* ── MODAL ── */
+  .modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.3); z-index: 300;
+    align-items: center; justify-content: center;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 14px;
+    padding: 26px; width: 360px;
+    box-shadow: var(--shadow-lg); animation: popIn .18s ease;
+  }
+  @keyframes popIn { from { opacity:0; transform: scale(.95); } to { opacity:1; transform: scale(1); } }
+  .modal h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 16px; }
+  .modal-meta { font-size: 0.76rem; color: var(--text-muted); margin-bottom: 16px; background: var(--bg); border-radius: 7px; padding: 8px 12px; }
+  .modal-field { margin-bottom: 13px; }
+  .modal-field label { display: block; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
+  .modal-field input[type=time], .modal-field select {
+    width: 100%; padding: 9px 11px; border-radius: 8px;
+    border: 1.5px solid var(--border); font-size: 0.84rem;
+    font-family: inherit; background: var(--bg); color: var(--text); outline: none;
+  }
+  .modal-field input[type=time]:focus, .modal-field select:focus { border-color: var(--accent); }
+  .modal-duration { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; }
+  .modal-quick { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .modal-quick button {
+    padding: 4px 10px; border-radius: 5px; border: 1.5px solid var(--border);
+    font-size: 0.72rem; cursor: pointer; background: var(--bg); font-family: inherit;
+    color: var(--text-muted); transition: all .12s;
+  }
+  .modal-quick button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .modal-actions { display: flex; gap: 7px; justify-content: flex-end; margin-top: 18px; }
+
+  .ampm-presets {
+    display: flex; gap: 8px; margin-bottom: 14px;
+  }
+  .ampm-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 10px 8px; border-radius: 9px;
+    border: 2px solid var(--border); background: var(--bg);
+    cursor: pointer; font-family: inherit;
+    transition: all .15s; gap: 2px;
+  }
+  .ampm-btn:hover { border-color: var(--accent); background: var(--accent-light); }
+  .ampm-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .ampm-btn.active .ampm-sub { color: rgba(255,255,255,0.75); }
+  .ampm-label { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.04em; }
+  .ampm-sub { font-size: 0.66rem; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+
+
+  .c0  { background: #d4edda; color: #1a5c2e; border-color: #b0d9bc; }
+  .c1  { background: #dde8f7; color: #1a3f72; border-color: #b8cceb; }
+  .c2  { background: #fde8d8; color: #7a2e0e; border-color: #f5c9a8; }
+  .c3  { background: #e8d8f5; color: #4a1d7a; border-color: #cfb0e8; }
+  .c4  { background: #fdf5d0; color: #6b5500; border-color: #ecdba0; }
+  .c5  { background: #d8f0f5; color: #0e4a5a; border-color: #a8dce8; }
+  .c6  { background: #fdd8e0; color: #7a0e2e; border-color: #f5a8b8; }
+  .c7  { background: #ffe4cc; color: #7a3000; border-color: #f5b880; }
+  .c8  { background: #f5e8d8; color: #5a2e0e; border-color: #e8c4a0; }
+  .c9  { background: #e0ddf7; color: #2e1a5a; border-color: #c0b8eb; }
+  .c10 { background: #d8f5f0; color: #0e3d38; border-color: #a8e0d8; }
+  .c11 { background: #f7e0dd; color: #5a1a14; border-color: #ebb8b0; }
+  .prof-group { margin-bottom: 10px; }
+  .prof-group-label {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 4px 5px;
+  }
+  .prof-group-badges { display: flex; flex-direction: column; gap: 4px; }
+  .c0-label { color: #1a5c2e; }
+  .c1-label { color: #1a3f72; }
+  .c2-label { color: #7a2e0e; }
+  .c3-label { color: #4a1d7a; }
+  .c4-label { color: #6b5500; }
+  .c5-label { color: #0e4a5a; }
+  .c6-label { color: #7a0e2e; }
+  .c7-label { color: #7a3000; }
+  .c8-label { color: #5a2e0e; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle therapist panel">☰</button>
+  <h1>Room <span>Schedule</span></h1>
+  <div class="day-tabs" id="dayTabs"></div>
+  <div class="filter-tabs">
+    <button class="filter-tab active" id="filter-all"       onclick="setFilter('all')">All</button>
+    <button class="filter-tab"        id="filter-ptmyo"     onclick="setFilter('ptmyo')">PT / MYO</button>
+    <button class="filter-tab"        id="filter-corridor"  onclick="setFilter('corridor')">Side Corridor</button>
+    <button class="filter-tab"        id="filter-gym"       onclick="setFilter('gym')">Gym</button>
+    <button class="filter-tab"        id="filter-classes"   onclick="setFilter('classes')">Classes</button>
+    <button class="filter-tab"        id="filter-gymutil"   onclick="setFilter('gymutil')">Gym Utilisation</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn btn-outline" onclick="openWeekView()" title="Weekly overview">📅 <span>Week View</span></button>
+  <button class="btn btn-primary" onclick="exportCSV()" title="Export CSV">↓ <span>Export CSV</span></button>
+</div>
+
+
+
+<!-- SIDEBAR OVERLAY (mobile) -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Therapists / Specialists</div>
+      <div class="badge-pool" id="badgePool"></div>
+    </div>
+    <div class="add-therapist-row">
+      <input type="text" id="newTherapistInput" placeholder="Add name…" onkeydown="if(event.key==='Enter')addTherapist()">
+      <button onclick="addTherapist()" title="Add therapist">+</button>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="hours-section">
+      <div class="sidebar-label">Opening Hours</div>
+      <div class="hours-row">
+        <label>Open</label>
+        <input type="time" id="openTime" value="08:00" onchange="buildGrid()">
+      </div>
+      <div class="hours-row">
+        <label>Close</label>
+        <input type="time" id="closeTime" value="20:00" onchange="buildGrid()">
+      </div>
+      <div class="hours-row">
+        <label>Slots</label>
+        <select id="slotInterval" onchange="buildGrid()">
+          <option value="20">20 min</option>
+          <option value="30">30 min</option>
+          <option value="60" selected>1 hour</option>
+          <option value="180">3 hours</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="avail-panel">
+      <div class="sidebar-label">Today's Availability</div>
+      <div id="availSummary"></div>
+    </div>
+  </div>
+
+  <!-- SCHEDULE -->
+  <div class="schedule-wrap">
+    <div class="room-bar" id="roomBar">
+      <span class="room-bar-label">Rooms:</span>
+      <div class="add-room-row">
+        <input type="text" id="newRoomInput" placeholder="New room name…" onkeydown="if(event.key==='Enter')addRoom()">
+        <button class="btn btn-primary" onclick="addRoom()" style="padding:6px 13px;font-size:0.79rem;">+ Add Room</button>
+      </div>
+    </div>
+    <div class="grid-container" id="gridContainer"></div>
+    <div id="gymView" style="display:none;flex:1;"></div>
+    <div id="gymUtilView" style="display:none;flex:1;"></div>
+    <div id="classesView" style="display:none;flex:1;"></div>
+  </div>
+</div>
+
+<!-- BOOKING MODAL -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modalTitle">Book Slot</h2>
+    <div class="modal-meta" id="modalMeta"></div>
+
+    <div class="modal-field" id="therapistFieldWrap">
+      <label>Therapist / Specialist</label>
+      <select id="modalTherapist"></select>
+    </div>
+
+    <!-- AM / PM presets -->
+    <div class="ampm-presets">
+      <button class="ampm-btn" id="presetAM" onclick="applyAmPm('AM')">
+        <span class="ampm-label">AM</span>
+        <span class="ampm-sub" id="amSubLabel"></span>
+      </button>
+      <button class="ampm-btn" id="presetPM" onclick="applyAmPm('PM')">
+        <span class="ampm-label">PM</span>
+        <span class="ampm-sub" id="pmSubLabel"></span>
+      </button>
+    </div>
+
+    <div class="modal-field">
+      <label>Start Time</label>
+      <input type="time" id="modalStart" oninput="updateDuration()">
+    </div>
+    <div class="modal-field">
+      <label>End Time</label>
+      <input type="time" id="modalEnd" oninput="updateDuration()">
+      <div class="modal-quick" id="quickDurations"></div>
+      <div class="modal-duration" id="modalDuration"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmBooking()">✓ Add Booking</button>
+    </div>
+  </div>
+</div>
+
+<!-- COPY DAY MODAL -->
+<div class="modal-bg" id="copyModalBg" onclick="if(event.target===this)closeCopyModal()">
+  <div class="modal">
+    <h2>Copy Schedule</h2>
+    <div class="modal-meta" id="copyMeta"></div>
+    <div class="modal-field">
+      <label>Copy to day</label>
+      <select id="copyTarget"></select>
+    </div>
+    <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px;">This will overwrite any existing bookings on the target day.</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeCopyModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmCopy()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- WEEK VIEW OVERLAY -->
+<div class="wv-bg" id="wvBg" onclick="if(event.target===this)closeWeekView()">
+  <div class="wv-modal">
+    <div class="wv-header">
+      <h2>📅 Weekly Overview</h2>
+      <div class="wv-header-right">
+        <div class="wv-filter-tabs">
+          <button class="wv-filter-tab active" id="wvf-all"      onclick="setWvFilter('all')">All</button>
+          <button class="wv-filter-tab"        id="wvf-ptmyo"    onclick="setWvFilter('ptmyo')">PT / MYO</button>
+          <button class="wv-filter-tab"        id="wvf-corridor" onclick="setWvFilter('corridor')">Side Corridor</button>
+        </div>
+        <div style="width:1px;height:20px;background:var(--border);margin:0 4px;flex-shrink:0"></div>
+        <button class="wv-filter-tab" id="wvf-free" onclick="toggleWvFree()" title="Show only free slots">✦ Free</button>
+        <button class="wv-close" onclick="closeWeekView()">✕</button>
+      </div>
+    </div>
+    <div class="wv-table-wrap">
+      <table class="wv-table" id="wvTable"></table>
+    </div>
+  </div>
+</div>
+
+<!-- CLASS MODAL -->
+<div class="modal-bg" id="classModalBg" onclick="if(event.target===this)closeClassModal()">
+  <div class="modal">
+    <h2 id="classModalTitle">Add Class</h2>
+    <div class="modal-field">
+      <label>Start Time</label>
+      <input type="time" id="classModalStart" value="09:00">
+    </div>
+    <div class="modal-field">
+      <label>Duration (minutes)</label>
+      <select id="classModalDur" style="width:100%;padding:9px 11px;border-radius:8px;border:1.5px solid var(--border);font-size:0.84rem;font-family:inherit;background:var(--bg);outline:none;">
+        <option value="30">30 min</option>
+        <option value="45">45 min</option>
+        <option value="60" selected>1 hour</option>
+        <option value="75">1h 15min</option>
+        <option value="90">1h 30min</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeClassModal()">Cancel</button>
+      <button class="btn btn-primary" id="classModalSave" onclick="saveClassModal()">+ Add Class</button>
+    </div>
+  </div>
+</div>
+
+<!-- UNDO BAR -->
+<div id="undoBar">
+  <span id="undoMsg">Booking removed</span>
+  <button onclick="undoAction()">Undo</button>
+</div>
+
+<script>
+// ── SIDEBAR TOGGLE ──
+let sidebarOpen = true;
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  const sb = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sb.classList.toggle('collapsed', !sidebarOpen);
+  if (window.innerWidth <= 768) {
+    overlay.classList.toggle('visible', sidebarOpen);
+  }
+}
+
+// ── ROOM FILTER ──
+let activeFilter = 'all';
+const FILTER_RULES = {
+  ptmyo:    name => /^(PT|MYO)/i.test(name),
+  corridor: name => /^(CONSULT|POD|DIET|PSYCH)/i.test(name),
+  gym:      name => /^GYM/i.test(name),
+  all:      ()   => true,
+};
+function setFilter(f) {
+  activeFilter = f;
+  ['all','ptmyo','corridor','gym','gymutil','classes'].forEach(id => {
+    document.getElementById('filter-' + id).classList.toggle('active', id === f);
+  });
+  const isGym      = f === 'gym';
+  const isGymUtil  = f === 'gymutil';
+  const isClasses  = f === 'classes';
+  const isCustom   = isGym || isGymUtil || isClasses;
+
+  document.getElementById('gymView').style.display      = isGym      ? 'block' : 'none';
+  document.getElementById('gymUtilView').style.display  = isGymUtil  ? 'block' : 'none';
+  document.getElementById('classesView').style.display  = isClasses  ? 'block' : 'none';
+  document.getElementById('gridContainer').style.display = isCustom  ? 'none'  : 'block';
+  document.getElementById('roomBar').style.display       = isCustom  ? 'none'  : 'flex';
+
+  if (isGym)         buildGymView();
+  else if (isGymUtil)  buildGymUtilView();
+  else if (isClasses)  buildClassesView();
+  else buildGrid();
+}
+
+// ── PERSISTENCE ──
+const STORAGE_KEY = 'roomScheduleState_v1';
+const SETTINGS_KEY = 'roomScheduleSettings_v1';
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      rooms:     state.rooms,
+      therapists: state.therapists,
+      bookings:  state.bookings,
+      activeDay: state.activeDay,
+    }));
+    // Save sidebar settings too
+    const openT  = document.getElementById('openTime');
+    const closeT = document.getElementById('closeTime');
+    const slotI  = document.getElementById('slotInterval');
+    if (openT) localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      openTime:     openT.value,
+      closeTime:    closeT.value,
+      slotInterval: slotI.value,
+    }));
+  } catch(e) { /* storage unavailable */ }
+}
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.rooms)      state.rooms      = parsed.rooms;
+      if (parsed.therapists) state.therapists = parsed.therapists;
+      if (parsed.bookings)   state.bookings   = parsed.bookings;
+      if (parsed.activeDay)  state.activeDay  = parsed.activeDay;
+    }
+    const savedSettings = localStorage.getItem(SETTINGS_KEY);
+    if (savedSettings) {
+      const ps = JSON.parse(savedSettings);
+      const openT  = document.getElementById('openTime');
+      const closeT = document.getElementById('closeTime');
+      const slotI  = document.getElementById('slotInterval');
+      if (openT  && ps.openTime)     openT.value  = ps.openTime;
+      if (closeT && ps.closeTime)    closeT.value = ps.closeTime;
+      if (slotI  && ps.slotInterval) slotI.value  = ps.slotInterval;
+    }
+  } catch(e) { /* storage unavailable */ }
+}
+
+// ── CONSTANTS ──
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const WEEKEND = ['Sat','Sun'];
+
+// ── STATE ──
+let state = {
+  activeDay: 'Mon',
+  rooms: ['PT 3','PT 4','PT 5','PT 6','MYO 7','CONSULT 8','CONSULT 11','POD 10','POD 12','PSYCH 9','DIET 2','GYM'],
+  therapists: [
+    'Michael Chan','Matthew Roussidis','Keerti Kasturi','Vicki Zhang','Samantha Haravitsidis','Hugh Hua','Luke Poon','Jason Sam',
+    'Terence Tang','Nicole Soldatos','Tim Roberts',
+    'Ben Hibberd','Pete Stathopoulos',
+    'Taylor Burnett','Kayla Sangiorgio',
+    'Celeste Costanzo','Viv Kumar',
+    'Michelle de Boer',
+    'Monique Zorzanello','Nicola Addlem','Fiona Busuttil',
+    'Lisa Godino','Matthew Evans','Karim Kantar'
+  ],
+  bookings: {}
+};
+let undoStack = null;
+let undoTimer = null;
+let dragData = null;
+let pendingDrop = null;
+
+// ── FORTNIGHTLY THERAPISTS ──
+// Add names here to mark them as fortnightly
+const FORTNIGHTLY = new Set([
+  'Matthew Evans',
+  'Karim Kantar',
+]);
+
+function isFortnightly(name) { return FORTNIGHTLY.has(name); }
+
+// ── PROFESSION MAP ──
+const PROFESSIONS = [
+  { label: 'Physiotherapists',            colorIdx: 0,  members: ['Michael Chan','Matthew Roussidis','Keerti Kasturi','Vicki Zhang','Samantha Haravitsidis','Hugh Hua','Luke Poon','Jason Sam'] },
+  { label: 'Podiatrists',                 colorIdx: 1,  members: ['Terence Tang','Nicole Soldatos','Tim Roberts'] },
+  { label: 'Exercise Physiologists',      colorIdx: 2,  members: ['Ben Hibberd','Pete Stathopoulos'] },
+  { label: 'Myotherapists & Massage',     colorIdx: 3,  members: ['Taylor Burnett','Kayla Sangiorgio'] },
+  { label: 'Dietitians & Nutritionists',  colorIdx: 4,  members: ['Celeste Costanzo','Viv Kumar'] },
+  { label: 'Personal Trainers',           colorIdx: 5,  members: ['Michelle de Boer'] },
+  { label: 'Psychologists',               colorIdx: 6,  members: ['Monique Zorzanello','Nicola Addlem','Fiona Busuttil'] },
+  { label: 'Speech Pathologists',         colorIdx: 7,  members: ['Lisa Godino'] },
+  { label: 'Medical Specialists',         colorIdx: 8,  members: ['Matthew Evans','Karim Kantar'] },
+];
+
+// Build a name→colorIdx lookup
+const therapistColorMap = {};
+PROFESSIONS.forEach(p => p.members.forEach(m => { therapistColorMap[m] = p.colorIdx; }));
+
+function getColor(name) {
+  // Known profession colour first, fallback to rotating
+  if (therapistColorMap[name] !== undefined) return therapistColorMap[name];
+  // For newly added therapists, use a high index so they don't clash with profession colours
+  if (therapistColorMap[name] === undefined) {
+    const used = new Set(Object.values(therapistColorMap));
+    for (let i = 8; i < 12; i++) { if (!used.has(i)) { therapistColorMap[name] = i; break; } }
+    if (therapistColorMap[name] === undefined) therapistColorMap[name] = 8;
+  }
+  return therapistColorMap[name];
+}
+
+const INITIAL_BOOKINGS = {"Mon": {"0": [{"therapist": "Matthew Roussidis", "start": "08:00", "end": "18:00", "colorIdx": 0}], "1": [{"therapist": "Keerti Kasturi", "start": "10:00", "end": "16:00", "colorIdx": 0}], "2": [{"therapist": "Samantha Haravitsidis", "start": "08:30", "end": "19:30", "colorIdx": 0}, {"therapist": "Michael Chan", "start": "09:00", "end": "11:30", "colorIdx": 0}], "3": [{"therapist": "Hugh Hua", "start": "09:00", "end": "17:00", "colorIdx": 0}], "4": [{"therapist": "Taylor Burnett", "start": "09:00", "end": "14:00", "colorIdx": 3}], "5": [], "6": [], "7": [{"therapist": "Terence Tang", "start": "09:00", "end": "18:00", "colorIdx": 1}], "8": [{"therapist": "Nicole Soldatos", "start": "10:00", "end": "15:00", "colorIdx": 1}], "9": [{"therapist": "Fiona Busuttil", "start": "09:30", "end": "14:30", "colorIdx": 6}, {"therapist": "Nicola Addlem", "start": "14:00", "end": "19:00", "colorIdx": 6}], "10": [{"therapist": "Viv Kumar", "start": "11:00", "end": "19:30", "colorIdx": 4}], "11": [{"therapist": "Ben Hibberd", "start": "09:30", "end": "18:00", "colorIdx": 2}, {"therapist": "Pete Stathopoulos", "start": "13:00", "end": "16:00", "colorIdx": 2}]}, "Tue": {"0": [{"therapist": "Matthew Roussidis", "start": "08:00", "end": "17:00", "colorIdx": 0}], "1": [{"therapist": "Michael Chan", "start": "09:00", "end": "17:00", "colorIdx": 0}], "2": [{"therapist": "Keerti Kasturi", "start": "10:00", "end": "16:00", "colorIdx": 0}], "3": [{"therapist": "Jason Sam", "start": "09:00", "end": "19:00", "colorIdx": 0}], "4": [{"therapist": "Kayla Sangiorgio", "start": "09:00", "end": "13:00", "colorIdx": 3}, {"therapist": "Taylor Burnett", "start": "14:00", "end": "19:00", "colorIdx": 3}], "5": [{"therapist": "Matthew Evans", "start": "13:30", "end": "16:30", "colorIdx": 8}], "6": [{"therapist": "Vicki Zhang", "start": "08:30", "end": "17:00", "colorIdx": 0}], "7": [{"therapist": "Nicole Soldatos", "start": "10:00", "end": "15:00", "colorIdx": 1}], "8": [{"therapist": "Tim Roberts", "start": "09:00", "end": "18:00", "colorIdx": 1}], "9": [{"therapist": "Monique Zorzanello", "start": "13:00", "end": "18:00", "colorIdx": 6}], "10": [{"therapist": "Celeste Costanzo", "start": "13:00", "end": "16:30", "colorIdx": 4}], "11": [{"therapist": "Luke Poon", "start": "09:30", "end": "14:30", "colorIdx": 0}, {"therapist": "Pete Stathopoulos", "start": "09:00", "end": "18:00", "colorIdx": 2}, {"therapist": "Michelle de Boer", "start": "12:00", "end": "16:00", "colorIdx": 5}]}, "Wed": {"0": [{"therapist": "Matthew Roussidis", "start": "08:00", "end": "13:00", "colorIdx": 0}, {"therapist": "Samantha Haravitsidis", "start": "08:00", "end": "19:00", "colorIdx": 0}], "1": [{"therapist": "Michael Chan", "start": "09:00", "end": "12:30", "colorIdx": 0}, {"therapist": "Keerti Kasturi", "start": "14:00", "end": "19:30", "colorIdx": 0}], "2": [{"therapist": "Hugh Hua", "start": "09:00", "end": "17:00", "colorIdx": 0}], "3": [{"therapist": "Jason Sam", "start": "09:00", "end": "19:00", "colorIdx": 0}], "4": [{"therapist": "Taylor Burnett", "start": "14:00", "end": "19:00", "colorIdx": 3}], "5": [{"therapist": "Matthew Evans", "start": "08:30", "end": "12:30", "colorIdx": 8}], "6": [{"therapist": "Vicki Zhang", "start": "09:00", "end": "16:00", "colorIdx": 0}], "7": [{"therapist": "Nicole Soldatos", "start": "10:00", "end": "15:00", "colorIdx": 1}], "8": [{"therapist": "Tim Roberts", "start": "08:30", "end": "16:00", "colorIdx": 1}], "9": [{"therapist": "Nicola Addlem", "start": "10:00", "end": "17:00", "colorIdx": 6}], "10": [{"therapist": "Celeste Costanzo", "start": "14:00", "end": "18:00", "colorIdx": 4}], "11": [{"therapist": "Ben Hibberd", "start": "09:00", "end": "18:00", "colorIdx": 2}, {"therapist": "Pete Stathopoulos", "start": "09:00", "end": "16:00", "colorIdx": 2}]}, "Thu": {"0": [{"therapist": "Matthew Roussidis", "start": "08:00", "end": "18:00", "colorIdx": 0}], "1": [{"therapist": "Michael Chan", "start": "09:00", "end": "17:00", "colorIdx": 0}], "2": [{"therapist": "Hugh Hua", "start": "09:00", "end": "17:00", "colorIdx": 0}], "3": [{"therapist": "Luke Poon", "start": "09:00", "end": "16:00", "colorIdx": 0}], "4": [], "5": [], "6": [{"therapist": "Vicki Zhang", "start": "08:00", "end": "17:00", "colorIdx": 0}], "7": [{"therapist": "Terence Tang", "start": "09:00", "end": "13:00", "colorIdx": 1}], "8": [{"therapist": "Tim Roberts", "start": "12:00", "end": "19:00", "colorIdx": 1}], "9": [{"therapist": "Monique Zorzanello", "start": "10:00", "end": "15:00", "colorIdx": 6}], "10": [{"therapist": "Celeste Costanzo", "start": "09:00", "end": "17:00", "colorIdx": 4}], "11": [{"therapist": "Ben Hibberd", "start": "10:00", "end": "18:00", "colorIdx": 2}, {"therapist": "Pete Stathopoulos", "start": "09:00", "end": "17:00", "colorIdx": 2}]}, "Fri": {"0": [{"therapist": "Matthew Roussidis", "start": "08:00", "end": "13:00", "colorIdx": 0}], "1": [{"therapist": "Michael Chan", "start": "09:00", "end": "17:00", "colorIdx": 0}], "2": [{"therapist": "Samantha Haravitsidis", "start": "08:00", "end": "19:00", "colorIdx": 0}], "3": [{"therapist": "Jason Sam", "start": "09:00", "end": "19:00", "colorIdx": 0}], "4": [{"therapist": "Hugh Hua", "start": "09:00", "end": "13:00", "colorIdx": 0}, {"therapist": "Kayla Sangiorgio", "start": "13:00", "end": "17:00", "colorIdx": 3}], "5": [{"therapist": "Karim Kantar", "start": "13:00", "end": "19:00", "colorIdx": 8}], "6": [], "7": [{"therapist": "Terence Tang", "start": "09:00", "end": "18:00", "colorIdx": 1}], "8": [{"therapist": "Tim Roberts", "start": "09:00", "end": "13:00", "colorIdx": 1}], "9": [{"therapist": "Monique Zorzanello", "start": "12:00", "end": "17:00", "colorIdx": 6}], "10": [{"therapist": "Lisa Godino", "start": "09:30", "end": "14:30", "colorIdx": 7}], "11": [{"therapist": "Ben Hibberd", "start": "09:30", "end": "17:00", "colorIdx": 2}, {"therapist": "Pete Stathopoulos", "start": "09:00", "end": "17:30", "colorIdx": 2}, {"therapist": "Michelle de Boer", "start": "10:00", "end": "14:30", "colorIdx": 5}]}, "Sat": {"0": [{"therapist": "Matthew Roussidis", "start": "09:00", "end": "12:00", "colorIdx": 0}], "1": [{"therapist": "Keerti Kasturi", "start": "09:00", "end": "12:00", "colorIdx": 0}], "2": [{"therapist": "Samantha Haravitsidis", "start": "09:00", "end": "12:00", "colorIdx": 0}], "3": [{"therapist": "Jason Sam", "start": "09:00", "end": "12:00", "colorIdx": 0}], "4": [{"therapist": "Taylor Burnett", "start": "09:00", "end": "12:00", "colorIdx": 3}], "5": [], "6": [], "7": [{"therapist": "Terence Tang", "start": "09:00", "end": "12:00", "colorIdx": 1}], "8": [], "9": [], "10": [], "11": []}, "Sun": {"0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [], "8": [], "9": [], "10": [], "11": []}};
+
+function initBookings() {
+  DAYS.forEach(d => {
+    if (!state.bookings[d]) state.bookings[d] = {};
+    state.rooms.forEach((_, i) => {
+      if (!state.bookings[d][i]) {
+        // Use pre-loaded schedule if available, otherwise empty
+        state.bookings[d][i] = (INITIAL_BOOKINGS[d] && INITIAL_BOOKINGS[d][i]) ? JSON.parse(JSON.stringify(INITIAL_BOOKINGS[d][i])) : [];
+      }
+    });
+  });
+}
+
+function init() {
+  loadState();
+  initBookings();
+  renderDayTabs();
+  renderBadgePool();
+  buildGrid();
+}
+
+// ── DAY TABS ──
+function renderDayTabs() {
+  const el = document.getElementById('dayTabs');
+  el.innerHTML = DAYS.map(d => {
+    const isWeekend = WEEKEND.includes(d);
+    const hasBookings = hasDayBookings(d);
+    return `<button class="day-tab ${d===state.activeDay?'active':''} ${isWeekend?'weekend':''}"
+      onclick="setDay('${d}')" title="${d}">
+      ${d}<span class="dot ${hasBookings&&d!==state.activeDay?'show':''}"></span>
+    </button>`;
+  }).join('');
+}
+function hasDayBookings(d) {
+  if (!state.bookings[d]) return false;
+  return Object.values(state.bookings[d]).some(arr => arr && arr.length > 0);
+}
+function setDay(d) {
+  state.activeDay = d;
+  renderDayTabs();
+  buildGrid();
+  saveState();
+}
+
+// ── BADGES ──
+function renderBadgePool() {
+  const pool = document.getElementById('badgePool');
+
+  // Build a set of known profession members for grouping
+  const professionMembers = new Set(PROFESSIONS.flatMap(p => p.members));
+
+  // Collect any manually-added therapists not in profession list
+  const extras = state.therapists.filter(t => !professionMembers.has(t));
+
+  let html = '';
+
+  PROFESSIONS.forEach(p => {
+    // Only show profession if it has at least one member still in state.therapists
+    const members = p.members.filter(m => state.therapists.includes(m));
+    if (!members.length) return;
+
+    html += `<div class="prof-group">
+      <div class="prof-group-label c${p.colorIdx}-label">${p.label}</div>
+      <div class="prof-group-badges">`;
+    members.forEach(t => {
+      const fn = isFortnightly(t);
+      html += `<div class="badge c${p.colorIdx}" draggable="true" ondragstart="onBadgeDragStart(event,'${escapeAttr(t)}',${p.colorIdx})">
+        <span class="badge-icon">⠿</span>
+        <span class="badge-name">${t}</span>
+        ${fn ? '<span class="badge-fn-pill">2W</span>' : ''}
+        <button class="badge-del" onclick="removeTherapist('${escapeAttr(t)}')" title="Remove">✕</button>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  // Extra/manually added
+  if (extras.length) {
+    html += `<div class="prof-group">
+      <div class="prof-group-label">Other</div>
+      <div class="prof-group-badges">`;
+    extras.forEach(t => {
+      const c = getColor(t);
+      const fn = isFortnightly(t);
+      html += `<div class="badge c${c}" draggable="true" ondragstart="onBadgeDragStart(event,'${escapeAttr(t)}',${c})">
+        <span class="badge-icon">⠿</span>
+        <span class="badge-name">${t}</span>
+        ${fn ? '<span class="badge-fn-pill">2W</span>' : ''}
+        <button class="badge-del" onclick="removeTherapist('${escapeAttr(t)}')" title="Remove">✕</button>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  pool.innerHTML = html;
+}
+function addTherapist() {
+  const inp = document.getElementById('newTherapistInput');
+  const name = inp.value.trim();
+  if (!name || state.therapists.includes(name)) { inp.focus(); return; }
+  state.therapists.push(name);
+  getColor(name);
+  inp.value = '';
+  renderBadgePool();
+  saveState();
+}
+function removeTherapist(name) {
+  state.therapists = state.therapists.filter(t => t !== name);
+  renderBadgePool();
+  saveState();
+}
+
+// ── ROOMS ──
+function addRoom() {
+  const inp = document.getElementById('newRoomInput');
+  const name = inp.value.trim() || `Room ${state.rooms.length + 1}`;
+  state.rooms.push(name);
+  inp.value = '';
+  initBookings();
+  buildGrid();
+  saveState();
+}
+function removeRoom(idx) {
+  if (state.rooms.length <= 1) return alert('You need at least one room.');
+  if (!confirm(`Remove "${state.rooms[idx]}"?`)) return;
+  state.rooms.splice(idx, 1);
+  DAYS.forEach(d => {
+    const nb = {};
+    Object.keys(state.bookings[d]).forEach(k => {
+      const ki = parseInt(k);
+      if (ki < idx) nb[ki] = state.bookings[d][ki];
+      else if (ki > idx) nb[ki-1] = state.bookings[d][ki];
+    });
+    state.bookings[d] = nb;
+  });
+  buildGrid();
+  saveState();
+}
+function renameRoom(idx, val) { state.rooms[idx] = val; saveState(); }
+
+// ── GRID ──
+function getSlots() {
+  const isSat = state.activeDay === 'Sat';
+  // Saturday: display from 8am (early starters) to 12pm, weekdays use sidebar settings
+  const openVal  = isSat ? '08:00' : (document.getElementById('openTime').value || '08:00');
+  const closeVal = isSat ? '12:00' : (document.getElementById('closeTime').value || '20:00');
+  const interval = parseInt(document.getElementById('slotInterval').value) || 60;
+  const [oh,om] = openVal.split(':').map(Number);
+  const [ch,cm] = closeVal.split(':').map(Number);
+  const start = oh*60+om, end = ch*60+cm;
+  const slots = [];
+  for (let m = start; m < end; m += interval) slots.push(m);
+  return { slots, interval };
+}
+
+// Returns core (billable) open/close minutes for a given day
+function getCoreHours(day) {
+  if (day === 'Sat') return { open: 9 * 60, close: 12 * 60 };
+  return { open: 9 * 60, close: 19 * 60 };
+}
+function minToTime(m) {
+  const h = Math.floor(m/60), mm = m%60;
+  return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+function timeToMin(t) { const [h,m] = t.split(':').map(Number); return h*60+m; }
+function formatTime(t) {
+  const [h,m] = t.split(':').map(Number);
+  const ampm = h>=12?'pm':'am', hh = h%12||12;
+  return `${hh}${m?':'+String(m).padStart(2,'0'):''}${ampm}`;
+}
+function calcDuration(start, end) {
+  const mins = timeToMin(end) - timeToMin(start);
+  if (mins <= 0) return '';
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins/60), m = mins%60;
+  return m ? `${h}h ${m}min` : `${h}h`;
+}
+function escapeAttr(s) { return s.replace(/'/g, "\\'"); }
+
+function buildGrid() {
+  initBookings();
+  const { slots, interval } = getSlots();
+  const day = state.activeDay;
+  const gc = document.getElementById('gridContainer');
+
+  // Apply room filter
+  const filterFn = FILTER_RULES[activeFilter] || FILTER_RULES.all;
+  const visibleRooms = state.rooms
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => filterFn(r));
+
+  let html = `<div class="grid-header">
+    <div class="gh-corner"></div>
+    ${visibleRooms.map(({ r, i }) => `
+      <div class="gh-room">
+        <input class="room-name-input" value="${r.replace(/"/g,'&quot;')}" onchange="renameRoom(${i},this.value)" title="Click to rename room">
+        <button class="room-del-btn" onclick="removeRoom(${i})" title="Remove room">✕</button>
+      </div>`).join('')}
+  </div><div class="grid-body">`;
+
+  slots.forEach((slotMin, si) => {
+    const timeStr = minToTime(slotMin);
+    const isHour = slotMin % 60 === 0;
+    html += `<div class="time-row ${isHour?'hour-marker':''}">
+      <div class="time-cell ${isHour?'hour':''}">${formatTime(timeStr)}</div>`;
+    visibleRooms.forEach(({ r, i: ri }) => {
+      html += `<div class="room-slot empty-hint" id="slot-${ri}-${si}"
+        data-room="${ri}" data-slot="${si}" data-time="${timeStr}"
+        ondragover="onSlotDragOver(event,${ri},${si})"
+        ondragleave="onSlotDragLeave(event,${ri},${si})"
+        ondrop="onSlotDrop(event,${ri},${si},'${timeStr}')"
+        ondblclick="onSlotDblClick(${ri},'${timeStr}')"></div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+  gc.innerHTML = html;
+  renderBookings();
+  updateAvailability();
+  saveState();
+}
+
+function renderBookings() {
+  document.querySelectorAll('.booking').forEach(el => el.remove());
+  const { slots, interval } = getSlots();
+  const day = state.activeDay;
+  state.rooms.forEach((_, ri) => {
+    const bks = state.bookings[day][ri] || [];
+    // For each booking, figure out how many others overlap it at any point
+    // so we can assign a column index and total columns for side-by-side rendering
+    bks.forEach((bk, bi) => {
+      placeBookingElement(bk, bi, ri, slots, interval, bks);
+    });
+  });
+}
+
+function getOverlapLayout(bk, bi, allBks) {
+  const s = timeToMin(bk.start);
+  const e = timeToMin(bk.end);
+  // Find all bookings that overlap with this one
+  const overlapping = allBks.filter((other, oi) => {
+    const os = timeToMin(other.start);
+    const oe = timeToMin(other.end);
+    return os < e && oe > s; // they overlap
+  });
+  const total = overlapping.length;
+  const col = overlapping.findIndex((_, i) => allBks.indexOf(overlapping[i]) === bi);
+  // fallback: use bi's position among overlapping
+  const myIdx = overlapping.findIndex(o => o === bk);
+  return { col: myIdx, total };
+}
+
+function placeBookingElement(bk, bi, ri, slots, interval, allBks) {
+  const startMin = timeToMin(bk.start);
+  const endMin = timeToMin(bk.end);
+
+  // Find the slot at or just before the booking's start time
+  const firstSlotIdx = slots.reduce((best, s, i) => s <= startMin ? i : best, -1);
+  if (firstSlotIdx === -1) return;
+
+  const slotH = 52;
+  const pxPerMin = slotH / interval;
+
+  // Offset within the anchor slot
+  const offsetMin = startMin - slots[firstSlotIdx];
+  const topPx = 2 + offsetMin * pxPerMin;
+  const heightPx = Math.max(20, (endMin - startMin) * pxPerMin - 4);
+
+  const slotEl = document.getElementById(`slot-${ri}-${firstSlotIdx}`);
+  if (!slotEl) return;
+
+  // Side-by-side layout
+  const { col, total } = getOverlapLayout(bk, bi, allBks || [bk]);
+  const pct = 100 / total;
+  const leftPct = col * pct;
+  const GAP = 2;
+  const leftVal = `calc(${leftPct}% + ${col === 0 ? 3 : GAP}px)`;
+  const widthVal = `calc(${pct}% - ${col === 0 ? 3 + GAP : GAP * 2}px - ${col === total - 1 ? 3 : 0}px)`;
+
+  const fn = isFortnightly(bk.therapist);
+  const el = document.createElement('div');
+  el.className = `booking c${bk.colorIdx}${fn ? ' fortnightly' : ''}`;
+  el.style.height = heightPx + 'px';
+  el.style.top = topPx + 'px';
+  el.style.left = leftVal;
+  el.style.right = 'auto';
+  el.style.width = widthVal;
+  el.draggable = true;
+  el.innerHTML = `
+    <div class="bk-top">
+      <span class="bk-name">${bk.therapist}</span>
+      ${fn ? '<span class="bk-fn-pill">2W</span>' : ''}
+      <button class="bk-del" onclick="removeBooking(${ri},${bi})" title="Remove booking">✕</button>
+    </div>
+    <span class="bk-time" id="bktime-${ri}-${bi}">${formatTime(bk.start)} – ${formatTime(bk.end)}</span>
+    <div class="bk-resize" title="Drag to extend hours"></div>`;
+  el.addEventListener('dragstart', e => onBookingDragStart(e, ri, bi, bk));
+  el.addEventListener('dblclick', e => { e.stopPropagation(); openModal(ri, null, bk.therapist, bk.colorIdx, bi); });
+  const handle = el.querySelector('.bk-resize');
+  handle.addEventListener('mousedown', e => onResizeStart(e, el, ri, bi, bk));
+  slotEl.appendChild(el);
+}
+
+// ── RESIZE ──
+let resizeState = null;
+
+function onResizeStart(e, el, ri, bi, bk) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const { slots, interval } = getSlots();
+  const slotH = 52;
+  const gridBody = document.querySelector('.grid-body');
+  const gridRect = gridBody.getBoundingClientRect();
+
+  el.classList.add('resizing');
+  el.draggable = false; // prevent drag while resizing
+
+  // Ghost element
+  const ghost = document.createElement('div');
+  ghost.className = 'resize-ghost ' + el.className.replace('booking','').replace('resizing','').trim();
+  ghost.style.top = el.style.top;
+  ghost.style.height = el.offsetHeight + 'px';
+  el.parentElement.appendChild(ghost);
+
+  resizeState = { el, ri, bi, bk: {...bk}, slots, interval, slotH, gridRect, ghost, startY: e.clientY, originalEnd: bk.end };
+
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeEnd);
+}
+
+function onResizeMove(e) {
+  if (!resizeState) return;
+  const { el, bk, slots, interval, slotH, gridRect, ghost } = resizeState;
+
+  const SNAP = 30; // always snap to 30-min increments
+  const pxPerMin = slotH / interval;
+  const openMin = slots[0];
+
+  // Convert cursor Y to a minute value relative to grid start
+  const relY = e.clientY - gridRect.top;
+  const rawMin = openMin + relY / pxPerMin;
+
+  // Snap to nearest 30-min boundary (round up to at least next snap past cursor)
+  const snappedEndMin = Math.round(rawMin / SNAP) * SNAP;
+  const startMin = timeToMin(bk.start);
+
+  // Enforce minimum of 30 minutes
+  const clampedEnd = Math.max(startMin + SNAP, snappedEndMin);
+  // Enforce maximum = end of last slot
+  const maxEnd = slots[slots.length - 1] + interval;
+  const finalEndMin = Math.min(clampedEnd, maxEnd);
+
+  const newEnd = minToTime(finalEndMin);
+  const durationMin = finalEndMin - startMin;
+  const newHeight = (durationMin / interval) * slotH - 4;
+
+  ghost.style.height = newHeight + 'px';
+  el.style.height = newHeight + 'px';
+  const timeLabel = el.querySelector('.bk-time');
+  if (timeLabel) timeLabel.textContent = `${formatTime(bk.start)} – ${formatTime(newEnd)}`;
+
+  resizeState.pendingEnd = newEnd;
+}
+
+function onResizeEnd() {
+  if (!resizeState) return;
+  const { el, ri, bi, bk, ghost } = resizeState;
+
+  el.classList.remove('resizing');
+  el.draggable = true;
+  ghost.remove();
+
+  if (resizeState.pendingEnd) {
+    const day = state.activeDay;
+    state.bookings[day][ri][bi].end = resizeState.pendingEnd;
+    renderBookings();
+    updateAvailability();
+    saveState();
+  }
+
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', onResizeEnd);
+  resizeState = null;
+}
+function onBadgeDragStart(e, therapist, colorIdx) {
+  dragData = { type: 'badge', therapist, colorIdx };
+  e.dataTransfer.effectAllowed = 'copy';
+}
+function onBookingDragStart(e, roomIdx, bookingIdx, bk) {
+  dragData = { type: 'booking', therapist: bk.therapist, colorIdx: bk.colorIdx,
+    start: bk.start, end: bk.end, fromRoom: roomIdx, fromIdx: bookingIdx };
+  e.dataTransfer.effectAllowed = 'move';
+  e.stopPropagation();
+}
+function onSlotDragOver(e, ri, si) {
+  e.preventDefault();
+  document.getElementById(`slot-${ri}-${si}`).classList.add('drag-over');
+}
+function onSlotDragLeave(e, ri, si) {
+  document.getElementById(`slot-${ri}-${si}`).classList.remove('drag-over');
+}
+function onSlotDrop(e, ri, si, timeStr) {
+  e.preventDefault();
+  document.getElementById(`slot-${ri}-${si}`).classList.remove('drag-over');
+  if (!dragData) return;
+
+  if (dragData.type === 'badge') {
+    openModal(ri, timeStr, dragData.therapist, dragData.colorIdx);
+  } else if (dragData.type === 'booking') {
+    const day = state.activeDay;
+    const bk = state.bookings[day][dragData.fromRoom][dragData.fromIdx];
+    if (!bk) { dragData = null; return; }
+    const duration = timeToMin(bk.end) - timeToMin(bk.start);
+    const newStart = timeStr;
+    const newEnd = minToTime(timeToMin(newStart) + duration);
+    state.bookings[day][dragData.fromRoom].splice(dragData.fromIdx, 1);
+    if (!state.bookings[day][ri]) state.bookings[day][ri] = [];
+    state.bookings[day][ri].push({ therapist: bk.therapist, start: newStart, end: newEnd, colorIdx: bk.colorIdx });
+    dragData = null;
+    renderBookings();
+    updateAvailability();
+    renderDayTabs();
+    saveState();
+  }
+}
+function onSlotDblClick(ri, timeStr) {
+  openModal(ri, timeStr, null, null, null);
+}
+
+// ── MODAL ──
+function openModal(ri, timeStr, therapist, colorIdx, editIdx, dayOverride) {
+  const day = dayOverride || state.activeDay;
+  const isEdit = editIdx !== null && editIdx !== undefined;
+  const existingBk = isEdit ? state.bookings[day][ri][editIdx] : null;
+
+  pendingDrop = { roomIdx: ri, slotTime: timeStr, therapist, colorIdx, editIdx: isEdit ? editIdx : null, day };
+
+  const { interval } = getSlots();
+
+  document.getElementById('modalTitle').textContent = isEdit ? '✏️ Edit Booking' : (therapist ? `Book: ${therapist}` : 'Add Booking');
+  document.getElementById('modalMeta').textContent = `${state.rooms[ri]}  ·  ${day}`;
+  document.getElementById('modalStart').value = isEdit ? existingBk.start : timeStr;
+  document.getElementById('modalEnd').value = isEdit ? existingBk.end : minToTime(timeToMin(timeStr) + interval);
+
+  // Therapist select
+  const wrap = document.getElementById('therapistFieldWrap');
+  const sel = document.getElementById('modalTherapist');
+  if (therapist && !isEdit) {
+    wrap.style.display = 'none';
+  } else {
+    wrap.style.display = '';
+    const currentTherapist = isEdit ? existingBk.therapist : null;
+    sel.innerHTML = state.therapists.map(t =>
+      `<option value="${escapeAttr(t)}" ${currentTherapist === t ? 'selected' : ''}>${t}</option>`
+    ).join('');
+  }
+
+  // Quick duration buttons
+  const quickDur = [30, 45, 60, 90, 120];
+  document.getElementById('quickDurations').innerHTML = quickDur.map(d =>
+    `<button onclick="setDuration(${d})">${d < 60 ? d+'min' : (d/60)+'h'}</button>`
+  ).join('');
+
+  // AM/PM sub-labels
+  const openVal = document.getElementById('openTime').value || '08:00';
+  document.getElementById('amSubLabel').textContent = `${formatTime(openVal)} – 1pm`;
+  document.getElementById('pmSubLabel').textContent = `1pm – 7pm`;
+  document.getElementById('presetAM').classList.remove('active');
+  document.getElementById('presetPM').classList.remove('active');
+
+  // Update confirm button
+  document.querySelector('#modalBg .btn-primary').textContent = isEdit ? '✓ Save Changes' : '✓ Add Booking';
+
+  updateDuration();
+  document.getElementById('modalBg').classList.add('open');
+  setTimeout(() => document.getElementById('modalStart').focus(), 100);
+}
+function applyAmPm(period) {
+  const openVal = document.getElementById('openTime').value || '08:00';
+  if (period === 'AM') {
+    document.getElementById('modalStart').value = openVal;
+    document.getElementById('modalEnd').value = '13:00';
+    document.getElementById('presetAM').classList.add('active');
+    document.getElementById('presetPM').classList.remove('active');
+  } else {
+    document.getElementById('modalStart').value = '13:00';
+    document.getElementById('modalEnd').value = '19:00';
+    document.getElementById('presetPM').classList.add('active');
+    document.getElementById('presetAM').classList.remove('active');
+  }
+  updateDuration();
+}
+function setDuration(mins) {
+  const start = document.getElementById('modalStart').value;
+  if (!start) return;
+  document.getElementById('modalEnd').value = minToTime(timeToMin(start) + mins);
+  updateDuration();
+}
+function updateDuration() {
+  const s = document.getElementById('modalStart').value;
+  const e = document.getElementById('modalEnd').value;
+  const dur = s && e ? calcDuration(s, e) : '';
+  document.getElementById('modalDuration').textContent = dur ? `Duration: ${dur}` : '';
+}
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+  document.getElementById('presetAM').classList.remove('active');
+  document.getElementById('presetPM').classList.remove('active');
+  dragData = null; pendingDrop = null;
+}
+function confirmBooking() {
+  if (!pendingDrop) return;
+  const start = document.getElementById('modalStart').value;
+  const end = document.getElementById('modalEnd').value;
+  if (!start || !end || timeToMin(end) <= timeToMin(start)) {
+    alert('Please set a valid start and end time.'); return;
+  }
+  const day = pendingDrop.day || state.activeDay;
+  const ri = pendingDrop.roomIdx;
+  if (!state.bookings[day][ri]) state.bookings[day][ri] = [];
+
+  let therapist = pendingDrop.therapist;
+  let colorIdx = pendingDrop.colorIdx;
+  if (!therapist || pendingDrop.editIdx !== null) {
+    therapist = document.getElementById('modalTherapist').value;
+    colorIdx = getColor(therapist);
+  }
+
+  if (pendingDrop.editIdx !== null) {
+    state.bookings[day][ri][pendingDrop.editIdx] = { therapist, start, end, colorIdx };
+  } else {
+    state.bookings[day][ri].push({ therapist, start, end, colorIdx });
+  }
+  closeModal();
+  if (activeFilter === 'gym') {
+    renderGymBookings();
+  } else {
+    renderBookings();
+    updateAvailability();
+    renderDayTabs();
+  }
+  saveState();
+}
+
+// ── REMOVE BOOKING WITH UNDO ──
+function removeBooking(ri, bi) {
+  const day = state.activeDay;
+  const removed = state.bookings[day][ri][bi];
+  state.bookings[day][ri].splice(bi, 1);
+  undoStack = { day, ri, bi, booking: removed };
+  renderBookings();
+  updateAvailability();
+  renderDayTabs();
+  showUndo(`Removed ${removed.therapist}`);
+  saveState();
+}
+function showUndo(msg) {
+  clearTimeout(undoTimer);
+  document.getElementById('undoMsg').textContent = msg;
+  document.getElementById('undoBar').classList.add('show');
+  undoTimer = setTimeout(hideUndo, 5000);
+}
+function hideUndo() {
+  document.getElementById('undoBar').classList.remove('show');
+  undoStack = null;
+}
+function undoAction() {
+  if (!undoStack) return;
+  const { day, ri, bi, booking } = undoStack;
+  state.bookings[day][ri].splice(bi, 0, booking);
+  undoStack = null;
+  hideUndo();
+  if (state.activeDay === day) { renderBookings(); updateAvailability(); }
+  renderDayTabs();
+  saveState();
+}
+
+// ── COPY DAY ──
+function copyDayPrompt() {
+  document.getElementById('copyMeta').textContent = `Copy all bookings from ${state.activeDay}`;
+  const sel = document.getElementById('copyTarget');
+  sel.innerHTML = DAYS.filter(d => d !== state.activeDay)
+    .map(d => `<option value="${d}">${d}</option>`).join('');
+  document.getElementById('copyModalBg').classList.add('open');
+}
+function closeCopyModal() { document.getElementById('copyModalBg').classList.remove('open'); }
+function confirmCopy() {
+  const target = document.getElementById('copyTarget').value;
+  const src = state.activeDay;
+  state.rooms.forEach((_, ri) => {
+    state.bookings[target][ri] = (state.bookings[src][ri] || []).map(b => ({...b}));
+  });
+  closeCopyModal();
+  renderDayTabs();
+  showUndo(`Copied ${src} → ${target}`);
+  saveState();
+}
+
+// ── AVAILABILITY ──
+function updateAvailability() {
+  const day = state.activeDay;
+  const { slots, interval } = getSlots();
+  const { open: CORE_OPEN, close: CORE_CLOSE } = getCoreHours(day);
+  const coreSlots = slots.filter(s => s >= CORE_OPEN && s < CORE_CLOSE);
+  const totalPerRoom = coreSlots.length;
+  let totalUsed = 0;
+
+  // Group rooms by zone
+  const ptmyoFilter    = r => /^(PT|MYO|GYM)/i.test(r);
+  const corridorFilter = r => /^(CONSULT|POD|DIET|PSYCH)/i.test(r);
+
+  let ptmyoFree = 0, ptmyoTotal = 0;
+  let corridorFree = 0, corridorTotal = 0;
+
+  let roomsHtml = state.rooms.map((r, ri) => {
+    const bks = state.bookings[day][ri] || [];
+    let usedSlots = 0;
+    bks.forEach(bk => {
+      const bkStart = Math.max(timeToMin(bk.start), CORE_OPEN);
+      const bkEnd   = Math.min(timeToMin(bk.end), CORE_CLOSE);
+      if (bkEnd > bkStart) usedSlots += (bkEnd - bkStart) / interval;
+    });
+    totalUsed += usedSlots;
+    const freeSlots = Math.max(0, totalPerRoom - usedSlots);
+
+    if (ptmyoFilter(r))    { ptmyoTotal += totalPerRoom; ptmyoFree += freeSlots; }
+    if (corridorFilter(r)) { corridorTotal += totalPerRoom; corridorFree += freeSlots; }
+
+    const dots = Array.from({length: Math.min(totalPerRoom, 12)}, (_, i) => {
+      return `<div class="avail-dot ${i < usedSlots ? 'used' : ''}"></div>`;
+    }).join('');
+    return `<div class="avail-room-row">
+      <span class="avail-room-name" title="${r}">${r}</span>
+      <div class="avail-room-slots">${dots}</div>
+    </div>`;
+  }).join('');
+
+  const total = totalPerRoom * state.rooms.length;
+  const pct = total > 0 ? Math.round((totalUsed/total)*100) : 0;
+  const free = Math.max(0, Math.floor(total - totalUsed));
+  const used = Math.floor(totalUsed);
+
+  document.getElementById('availSummary').innerHTML = `
+    <div class="avail-row">
+      <span>🟢 Free</span><strong>${free} slots</strong>
+    </div>
+    <div class="avail-row">
+      <span>🔵 Booked</span><strong>${used} slots</strong>
+    </div>
+    <div class="avail-bar-track"><div class="avail-bar-fill" style="width:${pct}%"></div></div>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px">${pct}% utilisation <span style="opacity:0.6">(${day === 'Sat' ? '9am – 12pm' : '9am – 7pm'})</span></div>
+
+    <div style="font-size:0.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px">PT / MYO</div>
+    <div class="avail-row" style="margin-bottom:8px">
+      <span style="font-size:0.75rem">🟢 Free</span><strong style="font-size:0.78rem">${Math.floor(ptmyoFree)} of ${ptmyoTotal} slots</strong>
+    </div>
+
+    <div style="font-size:0.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px">Side Corridor</div>
+    <div class="avail-row" style="margin-bottom:10px">
+      <span style="font-size:0.75rem">🟢 Free</span><strong style="font-size:0.78rem">${Math.floor(corridorFree)} of ${corridorTotal} slots</strong>
+    </div>
+
+    <div class="avail-rooms">${roomsHtml}</div>`;
+}
+
+// ── CLEAR / EXPORT ──
+function clearDay() {
+  if (!confirm(`Clear all bookings for ${state.activeDay}?`)) return;
+  const day = state.activeDay;
+  state.rooms.forEach((_,i) => { state.bookings[day][i] = []; });
+  renderBookings(); updateAvailability(); renderDayTabs();
+}
+function exportCSV() {
+  let rows = [['Day','Room','Therapist','Start','End','Duration']];
+  DAYS.forEach(d => {
+    state.rooms.forEach((r,ri) => {
+      (state.bookings[d][ri]||[]).forEach(bk => {
+        rows.push([d, r, bk.therapist, bk.start, bk.end, calcDuration(bk.start,bk.end)]);
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'room-schedule.csv';
+  a.click();
+}
+
+// ── GYM VIEW ──────────────────────────────────────────────────────────────────
+const GYM_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const GYM_WEEKEND = ['Sat','Sun'];
+
+// Gym space utilisation % per therapist — keyed by full name (lowercase)
+const GYM_UTIL_PCT = {
+  'jason sam':              25,
+  'matthew roussidis':      50,
+  'hugh hua':               50,
+  'samantha haravitsidis':  50,
+  'luke poon':             100,
+  'keerti kasturi':         25,
+  'michelle de boer':      100,
+  'viv kumar':             100,
+  'pete stathopoulos':     100,
+  'peter stathopoulos':    100,
+  'ben hibberd':           100,
+};
+const GYM_MAX_PCT = 500;
+
+function getGymUtilPct(therapistName) {
+  return GYM_UTIL_PCT[therapistName.trim().toLowerCase()] ?? 0;
+}
+
+// Returns a CSS colour string for a given combined % — 3 fixed shades
+function gymUtilColour(pct, alpha = 1) {
+  if (pct >= 400)      return `rgba(193,68,14,${alpha})`;   // red
+  if (pct >= 250)      return `rgba(212,136,10,${alpha})`;  // amber
+  if (pct > 0)         return `rgba(45,106,79,${alpha})`;   // green
+  return `rgba(0,0,0,0)`;
+}
+
+// Group classes: each entry is [startMinutes, durationMinutes]
+// Classes at :40/:30 overlap two slots — handled via ratio below
+const GROUP_CLASSES = {
+  Mon: [[10*60, 60], [11*60, 60], [13*60, 60]],
+  Tue: [[10*60, 60], [11*60, 60], [17*60+40, 60]],
+  Wed: [[8*60,  60], [10*60, 60], [11*60, 60], [17*60+30, 60], [18*60+30, 60]],
+  Thu: [[9*60,  60], [12*60, 60]],
+  Fri: [[8*60,  60], [10*60, 60], [11*60, 60], [17*60+40, 60]],
+  Sat: [[9*60,  60], [10*60, 60], [11*60, 60]],
+};
+const GROUP_CLASS_PCT = 150;
+
+// Returns group class contribution for a given day/slot:
+// { pct, isClass, isPartial }
+// isPartial = class starts mid-slot (e.g. 5:40 into a 5:00 slot)
+function calcGroupClassUtil(day, slotMin, interval) {
+  const classes = GROUP_CLASSES[day] || [];
+  const slotEnd = slotMin + interval;
+  let pct = 0;
+  let isClass = false;
+  let isPartial = false;
+
+  classes.forEach(([classStart, classDur]) => {
+    const classEnd = classStart + classDur;
+    // Does this class overlap this slot?
+    const overlapStart = Math.max(classStart, slotMin);
+    const overlapEnd   = Math.min(classEnd,   slotEnd);
+    if (overlapEnd <= overlapStart) return;
+
+    const overlapMins = overlapEnd - overlapStart;
+    const ratio = overlapMins / interval;
+    pct += GROUP_CLASS_PCT * ratio;
+    isClass = true;
+    // Partial if class doesn't start exactly on a slot boundary
+    if (classStart % interval !== 0) isPartial = true;
+  });
+
+  return { pct, isClass, isPartial };
+}
+
+// For a given day and time slot, sum up the gym utilisation %
+// Pulls from: (1) Gym tab bookings, (2) physios rostered in any PT/Myo room, (3) group classes
+function calcGymSlotUtil(day, slotMin, interval) {
+  const slotEnd = slotMin + interval;
+  let total = 0;
+  const names = [];
+  const seen = new Set();
+
+  // (1) Gym tab bookings
+  const gymRi = getGymRoomIdx();
+  if (gymRi !== -1) {
+    const gymBks = (state.bookings[day] && state.bookings[day][gymRi]) || [];
+    gymBks.forEach(bk => {
+      const s = timeToMin(bk.start), e = timeToMin(bk.end);
+      if (s < slotEnd && e > slotMin) {
+        const pct = getGymUtilPct(bk.therapist);
+        if (pct > 0 && !seen.has(bk.therapist)) {
+          total += pct; names.push(`${bk.therapist} (${pct}%)`); seen.add(bk.therapist);
+        }
+      }
+    });
+  }
+
+  // (2) Physios/EPs/PTs rostered in PT, Myo, or other rooms
+  state.rooms.forEach((roomName, ri) => {
+    if (/^GYM/i.test(roomName)) return;
+    const bks = (state.bookings[day] && state.bookings[day][ri]) || [];
+    bks.forEach(bk => {
+      if (seen.has(bk.therapist)) return;
+      const s = timeToMin(bk.start), e = timeToMin(bk.end);
+      if (s < slotEnd && e > slotMin) {
+        const pct = getGymUtilPct(bk.therapist);
+        if (pct > 0) {
+          total += pct; names.push(`${bk.therapist} (${pct}%)`); seen.add(bk.therapist);
+        }
+      }
+    });
+  });
+
+  // (3) Group classes
+  const { pct: classPct, isClass, isPartial } = calcGroupClassUtil(day, slotMin, interval);
+  if (classPct > 0) {
+    total += classPct;
+    names.push(`Group Class (${Math.round(classPct)}%)`);
+  }
+
+  return { pct: total, names, isClass, isPartial };
+}
+
+// Per-day summary: peak utilisation % across all slots
+function calcGymDayPeak(day) {
+  const ri = getGymRoomIdx();
+  if (ri === -1) return { pct: 0, over: false };
+  const { slots, interval } = getGymSlots();
+  let peak = 0;
+  slots.forEach(slotMin => {
+    const { pct } = calcGymSlotUtil(day, slotMin, interval);
+    if (pct > peak) peak = pct;
+  });
+  return { pct: Math.min(peak, GYM_MAX_PCT), over: peak > GYM_MAX_PCT };
+}
+
+function getGymRoomIdx() {
+  return state.rooms.findIndex(r => /^GYM/i.test(r));
+}
+
+function buildGymView() {
+  const gymEl = document.getElementById('gymView');
+  const ri = getGymRoomIdx();
+  if (ri === -1) {
+    gymEl.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted)">No GYM room found.</div>`;
+    return;
+  }
+  const { slots, interval } = getGymSlots();
+
+  let html = `<div class="gym-view-wrap">
+    <div class="gym-header">
+      <span class="gym-header-icon">🏋️</span>
+      <div>
+        <h2>Gym — Weekly Schedule</h2>
+        <p>Drag therapist badges onto any slot to book · Double-click a slot to add manually</p>
+      </div>
+    </div>
+    <div class="gym-week-grid">
+      <div class="gym-week-header">
+        <div></div>
+        ${GYM_DAYS.map(d => `<div class="${GYM_WEEKEND.includes(d)?'gym-wknd':''}"><div>${d}</div></div>`).join('')}
+      </div>
+      <div id="gymGridBody">`;
+
+  slots.forEach((slotMin, si) => {
+    const timeStr = minToTime(slotMin);
+    const isHour = slotMin % 60 === 0;
+    html += `<div class="gym-time-row ${isHour?'gym-hour':''}">
+      <div class="gym-time-cell ${isHour?'gym-hour-label':''}">${formatTime(timeStr)}</div>`;
+    GYM_DAYS.forEach((day, di) => {
+      html += `<div class="gym-day-slot" id="gymslot-${di}-${si}"
+        data-day="${day}" data-slot="${si}" data-time="${timeStr}"
+        ondragover="onGymSlotDragOver(event,${di},${si})"
+        ondragleave="onGymSlotDragLeave(event,${di},${si})"
+        ondrop="onGymSlotDrop(event,${di},${si},'${timeStr}','${day}')"
+        ondblclick="onGymSlotDblClick(${di},'${timeStr}','${day}')"></div>`;
+    });
+    html += `</div>`;
+  });
+
+  html += `</div></div></div>`;
+  gymEl.innerHTML = html;
+  _placeGymBookings();
+}
+
+function buildGymUtilView() {
+  const el = document.getElementById('gymUtilView');
+  const { slots, interval } = getGymSlots();
+  const dayPeaks = {};
+  GYM_DAYS.forEach(d => { dayPeaks[d] = calcGymDayPeak(d); });
+
+  let html = `<div class="gym-view-wrap">
+    <div class="gym-header">
+      <span class="gym-header-icon">📊</span>
+      <div>
+        <h2>Gym Utilisation</h2>
+        <p>Combined space utilisation from all rostered staff · Scale: 0% – 500%</p>
+      </div>
+      <div class="gym-legend">
+        <div class="gym-legend-item"><div class="gym-legend-swatch" style="background:${gymUtilColour(1)}"></div><span>0–249%</span></div>
+        <div class="gym-legend-item"><div class="gym-legend-swatch" style="background:${gymUtilColour(250)}"></div><span>250–399%</span></div>
+        <div class="gym-legend-item"><div class="gym-legend-swatch" style="background:${gymUtilColour(400)}"></div><span>400%+</span></div>
+        <div class="gym-legend-item"><span style="font-size:0.72rem;color:var(--text-muted)">✱ = over 500%</span></div>
+        <div class="gym-legend-item"><span style="font-size:0.72rem;color:var(--text-muted)">! = group class</span></div>
+        <div class="gym-legend-item"><span style="font-size:0.72rem;color:var(--text-muted)">^ = class starts mid-slot</span></div>
+      </div>
+    </div>
+    <div class="gym-week-grid">
+      <div class="gym-week-header">
+        <div></div>
+        ${GYM_DAYS.map(d => {
+          const { pct, over } = dayPeaks[d];
+          const col = pct > 0 ? gymUtilColour(pct, 0.9) : null;
+          const label = pct > 0 ? `${Math.round(pct)}%${over?'✱':''}` : '—';
+          return `<div class="${GYM_WEEKEND.includes(d)?'gym-wknd':''}">
+            <div>${d}</div>
+            <div class="gym-day-badge ${pct===0?'gym-day-badge-empty':''}" ${col?`style="background:${col}"`:''}>${label}</div>
+            <div class="gym-day-bar-track"><div class="gym-day-bar-fill" style="width:${Math.min(pct/GYM_MAX_PCT*100,100)}%;background:${col||'var(--border)'}"></div></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div>`;
+
+  slots.forEach((slotMin, si) => {
+    const timeStr = minToTime(slotMin);
+    const isHour = slotMin % 60 === 0;
+    html += `<div class="gym-time-row ${isHour?'gym-hour':''}">
+      <div class="gym-time-cell ${isHour?'gym-hour-label':''}">${formatTime(timeStr)}</div>`;
+    GYM_DAYS.forEach(day => {
+      const { pct, names, isClass, isPartial } = calcGymSlotUtil(day, slotMin, interval);
+      const over = pct > GYM_MAX_PCT;
+      const bg = pct > 0 ? gymUtilColour(pct, 0.82) : 'var(--bg)';
+      const textCol = pct > 0 ? 'white' : 'transparent';
+      const label = pct > 0 ? `${Math.round(pct)}%` : '';
+      const tooltip = names.length ? `${names.join(', ')} = ${Math.round(pct)}%` : '';
+      const markerEl = (isClass || over)
+        ? `<span style="position:absolute;top:2px;right:3px;font-size:0.6rem;font-weight:800;color:white;opacity:0.9;line-height:1;pointer-events:none;z-index:7">${isClass?(isPartial?'^':'!'):''}${over?'✱':''}</span>`
+        : '';
+      html += `<div class="gym-day-slot gym-util-cell"
+        style="background:${bg};cursor:default"
+        title="${tooltip}">
+        <span style="font-size:0.62rem;font-weight:700;color:${textCol};position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">${label}</span>
+        ${markerEl}
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  html += `</div></div></div>`;
+  el.innerHTML = html;
+}
+
+function getGymSlots() {
+  const openVal  = document.getElementById('openTime').value  || '08:00';
+  const closeVal = document.getElementById('closeTime').value || '20:00';
+  const interval = parseInt(document.getElementById('slotInterval').value) || 60;
+  const [oh,om] = openVal.split(':').map(Number);
+  const [ch,cm] = closeVal.split(':').map(Number);
+  const start = oh*60+om, end = ch*60+cm;
+  const slots = [];
+  for (let m = start; m < end; m += interval) slots.push(m);
+  return { slots, interval };
+}
+
+function renderGymBookings() {
+  if (activeFilter === 'gymutil') {
+    buildGymUtilView();
+  } else {
+    buildGymView();
+    _placeGymBookings();
+  }
+}
+
+function _placeGymBookings() {
+  document.querySelectorAll('.gym-booking').forEach(el => el.remove());
+  const ri = getGymRoomIdx();
+  if (ri === -1) return;
+  const { slots, interval } = getGymSlots();
+  GYM_DAYS.forEach((day, di) => {
+    const bks = (state.bookings[day] && state.bookings[day][ri]) || [];
+    bks.forEach((bk, bi) => placeGymBooking(bk, bi, di, day, ri, slots, interval, bks));
+  });
+}
+
+function placeGymBooking(bk, bi, di, day, ri, slots, interval, allBks) {
+  const startMin = timeToMin(bk.start);
+  const endMin   = timeToMin(bk.end);
+  const firstSlotIdx = slots.reduce((best, s, i) => s <= startMin ? i : best, -1);
+  if (firstSlotIdx === -1) return;
+
+  const slotH = 52;
+  const pxPerMin = slotH / interval;
+  const offsetMin = startMin - slots[firstSlotIdx];
+  const topPx = 2 + offsetMin * pxPerMin;
+  const heightPx = Math.max(20, (endMin - startMin) * pxPerMin - 4);
+
+  const slotEl = document.getElementById(`gymslot-${di}-${firstSlotIdx}`);
+  if (!slotEl) return;
+
+  // Side-by-side overlap layout
+  const { col, total } = getOverlapLayout(bk, bi, allBks);
+  const pct = 100 / total;
+  const GAP = 2;
+  const leftVal  = `calc(${col*pct}% + ${col===0?3:GAP}px)`;
+  const widthVal = `calc(${pct}% - ${col===0?3+GAP:GAP*2}px - ${col===total-1?3:0}px)`;
+
+  const fn = isFortnightly(bk.therapist);
+  const el = document.createElement('div');
+  el.className = `gym-booking c${bk.colorIdx}${fn?' fortnightly':''}`;
+  el.style.cssText = `height:${heightPx}px;top:${topPx}px;left:${leftVal};width:${widthVal};right:auto;position:absolute;`;
+  el.draggable = true;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:4px;width:100%">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bk.therapist}</span>
+      ${fn?'<span class="bk-fn-pill">2W</span>':''}
+      <button class="gym-bk-del" onclick="removeGymBooking('${day}',${ri},${bi})">✕</button>
+    </div>
+    <span style="font-size:0.62rem;opacity:0.7;font-family:'DM Mono',monospace">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
+    <div class="gym-bk-resize" title="Drag to extend"></div>`;
+  el.addEventListener('dragstart', e => onGymBookingDragStart(e, day, ri, bi, bk));
+  el.addEventListener('dblclick',  e => { e.stopPropagation(); openModal(ri, null, bk.therapist, bk.colorIdx, bi, day); });
+  el.querySelector('.gym-bk-resize').addEventListener('mousedown', e => onGymResizeStart(e, el, day, ri, bi, bk));
+  slotEl.appendChild(el);
+}
+
+// Gym drag handlers
+let gymDragData = null;
+function onGymBookingDragStart(e, day, ri, bi, bk) {
+  gymDragData = { type:'booking', day, ri, bi, bk };
+  e.dataTransfer.effectAllowed = 'move';
+  e.stopPropagation();
+}
+function onGymSlotDragOver(e, di, si) {
+  e.preventDefault();
+  document.getElementById(`gymslot-${di}-${si}`).classList.add('drag-over');
+}
+function onGymSlotDragLeave(e, di, si) {
+  document.getElementById(`gymslot-${di}-${si}`).classList.remove('drag-over');
+}
+function onGymSlotDrop(e, di, si, timeStr, day) {
+  e.preventDefault();
+  document.getElementById(`gymslot-${di}-${si}`).classList.remove('drag-over');
+  const ri = getGymRoomIdx(); if (ri === -1) return;
+
+  if (dragData && dragData.type === 'badge') {
+    // Badge dropped from sidebar
+    openModal(ri, timeStr, dragData.therapist, dragData.colorIdx, null, day);
+    dragData = null;
+  } else if (gymDragData && gymDragData.type === 'booking') {
+    // Move existing gym booking
+    const { day: fromDay, ri: fromRi, bi: fromBi, bk } = gymDragData;
+    const duration = timeToMin(bk.end) - timeToMin(bk.start);
+    const newEnd = minToTime(timeToMin(timeStr) + duration);
+    state.bookings[fromDay][fromRi].splice(fromBi, 1);
+    if (!state.bookings[day][ri]) state.bookings[day][ri] = [];
+    state.bookings[day][ri].push({ ...bk, start: timeStr, end: newEnd });
+    gymDragData = null;
+    renderGymBookings();
+    saveState();
+  }
+}
+function onGymSlotDblClick(di, timeStr, day) {
+  const ri = getGymRoomIdx(); if (ri === -1) return;
+  openModal(ri, timeStr, null, null, null, day);
+}
+function removeGymBooking(day, ri, bi) {
+  const removed = state.bookings[day][ri][bi];
+  state.bookings[day][ri].splice(bi, 1);
+  renderGymBookings();
+  saveState();
+  showUndo(`Removed ${removed.therapist}`);
+}
+
+// Gym resize (mirrors main resize but targets gym elements)
+let gymResizeState = null;
+function onGymResizeStart(e, el, day, ri, bi, bk) {
+  e.preventDefault(); e.stopPropagation();
+  const { slots, interval } = getGymSlots();
+  const slotH = 52;
+  const gridBody = document.getElementById('gymGridBody');
+  const gridRect = gridBody.getBoundingClientRect();
+  el.draggable = false;
+  const ghost = document.createElement('div');
+  ghost.className = el.className; ghost.style.cssText = el.style.cssText;
+  ghost.style.opacity = '0.4'; ghost.style.pointerEvents = 'none';
+  el.parentElement.appendChild(ghost);
+  gymResizeState = { el, day, ri, bi, bk: {...bk}, slots, interval, slotH, gridRect, ghost };
+  document.addEventListener('mousemove', onGymResizeMove);
+  document.addEventListener('mouseup',   onGymResizeEnd);
+}
+function onGymResizeMove(e) {
+  if (!gymResizeState) return;
+  const { el, bk, slots, interval, slotH, gridRect, ghost } = gymResizeState;
+  const SNAP = 30;
+  const pxPerMin = slotH / interval;
+  const openMin = slots[0];
+  const relY = e.clientY - gridRect.top;
+  const rawMin = openMin + relY / pxPerMin;
+  const snappedEndMin = Math.round(rawMin / SNAP) * SNAP;
+  const startMin = timeToMin(bk.start);
+  const clampedEnd = Math.max(startMin + SNAP, snappedEndMin);
+  const maxEnd = slots[slots.length-1] + interval;
+  const finalEndMin = Math.min(clampedEnd, maxEnd);
+  const newEnd = minToTime(finalEndMin);
+  const newHeight = (finalEndMin - startMin) / interval * slotH - 4;
+  ghost.style.height = newHeight + 'px';
+  el.style.height = newHeight + 'px';
+  const tl = el.querySelector('span:last-of-type');
+  if (tl) tl.textContent = `${formatTime(bk.start)}–${formatTime(newEnd)}`;
+  gymResizeState.pendingEnd = newEnd;
+}
+function onGymResizeEnd() {
+  if (!gymResizeState) return;
+  const { el, day, ri, bi, ghost } = gymResizeState;
+  el.draggable = true; ghost.remove();
+  if (gymResizeState.pendingEnd) {
+    state.bookings[day][ri][bi].end = gymResizeState.pendingEnd;
+    renderGymBookings();
+    saveState();
+  }
+  document.removeEventListener('mousemove', onGymResizeMove);
+  document.removeEventListener('mouseup', onGymResizeEnd);
+  gymResizeState = null;
+}
+
+function buildClassesView() {
+  const el = document.getElementById('classesView');
+  const { slots, interval } = getGymSlots();
+  const slotH = 52;
+  const pxPerMin = slotH / interval;
+
+  // Count classes per day for header
+  const classCounts = {};
+  GYM_DAYS.forEach(d => { classCounts[d] = (GROUP_CLASSES[d] || []).length; });
+
+  let html = `<div class="gym-view-wrap">
+    <div class="gym-header">
+      <span class="gym-header-icon">🏃</span>
+      <div>
+        <h2>Group Classes</h2>
+        <p>Weekly class timetable · 1 hour per class · 150% gym utilisation</p>
+      </div>
+      <div class="gym-legend">
+        <div class="gym-legend-item"><div class="gym-legend-swatch" style="background:var(--accent)"></div><span>Group Class</span></div>
+      </div>
+    </div>
+    <div class="gym-week-grid">
+      <div class="gym-week-header">
+        <div></div>
+        ${GYM_DAYS.map(d => `
+          <div class="${GYM_WEEKEND.includes(d)?'gym-wknd':''}">
+            <div>${d}</div>
+            <button class="classes-add-btn" onclick="openAddClassModal('${d}')" title="Add class on ${d}">+ Add</button>
+          </div>`).join('')}
+      </div>
+      <div id="classesGridBody">`;
+
+  slots.forEach((slotMin, si) => {
+    const timeStr = minToTime(slotMin);
+    const isHour  = slotMin % 60 === 0;
+    html += `<div class="gym-time-row ${isHour?'gym-hour':''}">
+      <div class="gym-time-cell ${isHour?'gym-hour-label':''}">${formatTime(timeStr)}</div>`;
+    GYM_DAYS.forEach((day, di) => {
+      html += `<div class="gym-day-slot" id="classslot-${di}-${si}" style="position:relative"
+        ondblclick="openAddClassModal('${day}')"></div>`;
+    });
+    html += `</div>`;
+  });
+
+  html += `</div></div></div>`;
+  el.innerHTML = html;
+  _placeClassBlocks(slots, interval, pxPerMin);
+}
+
+function _placeClassBlocks(slots, interval, pxPerMin) {
+  document.querySelectorAll('.classes-block').forEach(e => e.remove());
+  const slotH = 52;
+
+  GYM_DAYS.forEach((day, di) => {
+    const classes = GROUP_CLASSES[day] || [];
+    classes.forEach(([classStart, classDur], ci) => {
+      const classEnd = classStart + classDur;
+      const anchorIdx = slots.reduce((best, s, i) => s <= classStart ? i : best, -1);
+      if (anchorIdx === -1) return;
+
+      const anchorMin = slots[anchorIdx];
+      const offsetPx  = (classStart - anchorMin) * pxPerMin;
+      const heightPx  = Math.max(24, classDur * pxPerMin - 4);
+
+      const slotEl = document.getElementById(`classslot-${di}-${anchorIdx}`);
+      if (!slotEl) return;
+
+      const chip = document.createElement('div');
+      chip.className = 'classes-block';
+      chip.style.cssText = `top:${offsetPx + 2}px;height:${heightPx}px;`;
+      chip.innerHTML = `
+        <div class="classes-block-top">
+          <span class="classes-block-name">Group Class</span>
+          <button class="classes-block-del" onclick="deleteClass('${day}',${ci})" title="Remove">✕</button>
+        </div>
+        <span class="classes-block-time">${formatTime(minToTime(classStart))} – ${formatTime(minToTime(classEnd))}</span>`;
+      chip.addEventListener('dblclick', e => { e.stopPropagation(); openEditClassModal(day, ci); });
+      slotEl.appendChild(chip);
+    });
+  });
+}
+
+// ── CLASS MODAL ──
+let classModalMode = null; // 'add' or 'edit'
+let classModalDay  = null;
+let classModalIdx  = null;
+
+function openAddClassModal(day) {
+  classModalMode = 'add'; classModalDay = day; classModalIdx = null;
+  document.getElementById('classModalTitle').textContent = `Add Class — ${day}`;
+  document.getElementById('classModalStart').value = '09:00';
+  document.getElementById('classModalDur').value   = '60';
+  document.getElementById('classModalSave').textContent = '+ Add Class';
+  document.getElementById('classModalBg').classList.add('open');
+}
+function openEditClassModal(day, idx) {
+  classModalMode = 'edit'; classModalDay = day; classModalIdx = idx;
+  const [cs, cd] = GROUP_CLASSES[day][idx];
+  document.getElementById('classModalTitle').textContent = `Edit Class — ${day}`;
+  document.getElementById('classModalStart').value = minToTime(cs);
+  document.getElementById('classModalDur').value   = String(cd);
+  document.getElementById('classModalSave').textContent = '✓ Save Changes';
+  document.getElementById('classModalBg').classList.add('open');
+}
+function closeClassModal() {
+  document.getElementById('classModalBg').classList.remove('open');
+}
+function saveClassModal() {
+  const startVal = document.getElementById('classModalStart').value;
+  const durVal   = parseInt(document.getElementById('classModalDur').value) || 60;
+  if (!startVal) return;
+  const startMin = timeToMin(startVal);
+  const day = classModalDay;
+  if (!GROUP_CLASSES[day]) GROUP_CLASSES[day] = [];
+
+  if (classModalMode === 'add') {
+    GROUP_CLASSES[day].push([startMin, durVal]);
+  } else {
+    GROUP_CLASSES[day][classModalIdx] = [startMin, durVal];
+  }
+  closeClassModal();
+  buildClassesView();
+  if (activeFilter === 'gymutil') buildGymUtilView();
+}
+function deleteClass(day, idx) {
+  GROUP_CLASSES[day].splice(idx, 1);
+  buildClassesView();
+  if (activeFilter === 'gymutil') buildGymUtilView();
+}
+// ── WEEK VIEW ──
+const WV_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+let wvFilter = 'all';
+let wvFreeOnly = false;
+
+function setWvFilter(f) {
+  wvFilter = f;
+  ['all','ptmyo','corridor'].forEach(id => {
+    document.getElementById('wvf-' + id).classList.toggle('active', id === f);
+  });
+  renderWeekView();
+}
+
+function toggleWvFree() {
+  wvFreeOnly = !wvFreeOnly;
+  document.getElementById('wvf-free').classList.toggle('active', wvFreeOnly);
+  renderWeekView();
+}
+
+function openWeekView() {
+  wvFilter = 'all';
+  wvFreeOnly = false;
+  ['all','ptmyo','corridor'].forEach(id => {
+    document.getElementById('wvf-' + id).classList.toggle('active', id === 'all');
+  });
+  document.getElementById('wvf-free').classList.remove('active');
+  renderWeekView();
+  document.getElementById('wvBg').classList.add('open');
+}
+
+function closeWeekView() {
+  document.getElementById('wvBg').classList.remove('open');
+}
+
+function renderWeekView() {
+  const filterFn = FILTER_RULES[wvFilter] || FILTER_RULES.all;
+  const visibleRooms = state.rooms.map((r,i) => ({r,i})).filter(({r}) => filterFn(r));
+
+  const CORE_OPEN  = 9 * 60;
+  const CORE_CLOSE = 19 * 60;
+  const MIN_GAP    = 3 * 60; // 3 hours in minutes
+
+  const sections = [
+    { label: 'PT / MYO',      match: r => /^(PT|MYO)/i.test(r) },
+    { label: 'Gym',           match: r => /^GYM/i.test(r) },
+    { label: 'Side Corridor', match: r => /^(CONSULT|POD|DIET|PSYCH)/i.test(r) },
+  ];
+  const weekend = ['Sat','Sun'];
+
+  // Helper: find free windows of >= MIN_GAP within core hours for a room/day
+  function getFreeWindows(bks, day) {
+    const { open: CORE_OPEN, close: CORE_CLOSE } = getCoreHours(day);
+    // Build sorted list of occupied intervals clamped to core hours
+    const occupied = bks
+      .map(bk => [Math.max(timeToMin(bk.start), CORE_OPEN), Math.min(timeToMin(bk.end), CORE_CLOSE)])
+      .filter(([s,e]) => e > s)
+      .sort((a,b) => a[0]-b[0]);
+
+    // Merge overlapping intervals
+    const merged = [];
+    for (const [s,e] of occupied) {
+      if (merged.length && s <= merged[merged.length-1][1]) {
+        merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], e);
+      } else {
+        merged.push([s,e]);
+      }
+    }
+
+    // Find gaps between merged intervals
+    const gaps = [];
+    let cursor = CORE_OPEN;
+    for (const [s,e] of merged) {
+      if (s > cursor && (s - cursor) >= MIN_GAP) gaps.push([cursor, s]);
+      cursor = Math.max(cursor, e);
+    }
+    if (CORE_CLOSE > cursor && (CORE_CLOSE - cursor) >= MIN_GAP) gaps.push([cursor, CORE_CLOSE]);
+    return gaps;
+  }
+
+  // Pre-calculate per-day utilisation across visible rooms + zone breakdowns
+  const ptmyoRooms    = state.rooms.map((r,i) => ({r,i})).filter(({r}) => /^(PT|MYO|GYM)/i.test(r));
+  const corridorRooms = state.rooms.map((r,i) => ({r,i})).filter(({r}) => /^(CONSULT|POD|DIET|PSYCH)/i.test(r));
+
+  function calcDayUtil(rooms, day) {
+    const { open: CO, close: CC } = getCoreHours(day);
+    const slotMin = 3 * 60;
+    const slotsPerRoom = Math.floor((CC - CO) / slotMin);
+    const total = slotsPerRoom * rooms.length;
+    let used = 0;
+    rooms.forEach(({ i: ri }) => {
+      let roomUsed = 0;
+      (state.bookings[day]?.[ri] || []).forEach(bk => {
+        const s = Math.max(timeToMin(bk.start), CO);
+        const e = Math.min(timeToMin(bk.end), CC);
+        if (e > s) roomUsed += (e - s) / slotMin;
+      });
+      // Cap at room capacity — overlapping bookings shouldn't exceed 100% of one room
+      used += Math.min(roomUsed, slotsPerRoom);
+    });
+    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    const free = Math.max(0, Math.floor(total - used));
+    return { pct, free, total };
+  }
+
+  const dayStats = {};
+  WV_DAYS.forEach(day => {
+    const overall  = calcDayUtil(visibleRooms, day);
+    const ptmyo    = calcDayUtil(ptmyoRooms, day);
+    const corridor = calcDayUtil(corridorRooms, day);
+    dayStats[day]  = { overall, ptmyo, corridor };
+  });
+
+  function barHtml(pct, colour) {
+    return `<div style="height:4px;background:var(--border);border-radius:3px;overflow:hidden;margin:2px 0 4px">
+      <div style="height:100%;width:${pct}%;background:${colour};border-radius:3px"></div>
+    </div>`;
+  }
+  function zoneRow(label, stat) {
+    if (stat.total === 0) return '';
+    const col = stat.pct >= 80 ? '#c1440e' : stat.pct >= 50 ? '#d4880a' : '#2d6a4f';
+    return `<div style="margin-bottom:2px">
+      <div style="font-size:0.6rem;color:var(--text-muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:1px">${label}</div>
+      <div style="font-size:0.62rem;color:var(--text-muted);font-weight:400">${stat.free} free · ${stat.pct}%</div>
+      ${barHtml(stat.pct, col)}
+    </div>`;
+  }
+
+  let html = `<thead>
+    <tr>
+      <th style="min-width:90px;border-bottom:none;vertical-align:top;padding-top:8px;font-size:0.65rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase">Utilisation<br><span style="font-weight:400;font-size:0.6rem;opacity:.7">3hr slots</span></th>
+      ${WV_DAYS.map(d => {
+        const { overall, ptmyo, corridor } = dayStats[d];
+        const isWknd = weekend.includes(d);
+        const barCol = overall.pct >= 80 ? '#c1440e' : overall.pct >= 50 ? '#d4880a' : '#2d6a4f';
+        return `<th class="day-th ${isWknd?'weekend':''}" style="border-bottom:none;padding-bottom:6px;font-weight:400;vertical-align:top">
+          <div style="font-size:0.82rem;font-weight:600;margin-bottom:4px">${d}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:2px">${overall.free} of ${overall.total} free · ${overall.pct}%</div>
+          ${barHtml(overall.pct, barCol)}
+          <div style="display:flex;gap:8px;margin-top:2px">
+            <div style="flex:1">${zoneRow('PT / MYO', ptmyo)}</div>
+            <div style="flex:1">${zoneRow('Corridor', corridor)}</div>
+          </div>
+        </th>`;
+      }).join('')}
+    </tr>
+    <tr>
+      <th style="min-width:90px">Room</th>
+      ${WV_DAYS.map(d => `<th class="day-th ${weekend.includes(d)?'weekend':''}" style="font-size:0.65rem;color:var(--text-muted);font-weight:500">Bookings</th>`).join('')}
+    </tr>
+  </thead><tbody>`;
+
+  let lastSection = null;
+
+  visibleRooms.forEach(({r, i: ri}) => {
+    const section = sections.find(s => s.match(r));
+    const sectionLabel = section ? section.label : 'Other';
+
+    if (sectionLabel !== lastSection) {
+      html += `<tr class="wv-section-row"><td colspan="${WV_DAYS.length + 1}">${sectionLabel}</td></tr>`;
+      lastSection = sectionLabel;
+    }
+
+    html += `<tr><td class="room-td">${r}</td>`;
+    let rowHasFree = false;
+    WV_DAYS.forEach(day => {
+      const bks = (state.bookings[day] && state.bookings[day][ri]) || [];
+      const freeWindows = getFreeWindows(bks, day);
+      if (freeWindows.length) rowHasFree = true;
+
+      let cellContent = '';
+
+      // Booking chips — hidden when Free-only mode is on
+      if (bks.length && !wvFreeOnly) {
+        cellContent += bks.map(bk => {
+          const fn = isFortnightly(bk.therapist);
+          const firstName = bk.therapist.split(' ')[0];
+          return `<div class="wv-chip c${bk.colorIdx}${fn?' fortnightly':''}">
+            <span class="wv-chip-name">${firstName}</span>
+            <span class="wv-chip-time">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
+            ${fn ? '<span class="wv-chip-fn">2W</span>' : ''}
+          </div>`;
+        }).join('');
+      }
+
+      // Open slot chips
+      freeWindows.forEach(([s,e]) => {
+        const dur = calcDuration(minToTime(s), minToTime(e));
+        cellContent += `<div class="wv-open-slot">
+          <span class="wv-open-slot-icon">✦</span>
+          <span>${dur} free</span>
+          <span class="wv-open-slot-time">${formatTime(minToTime(s))}–${formatTime(minToTime(e))}</span>
+        </div>`;
+      });
+
+      if (!cellContent) cellContent = `<span class="wv-empty">—</span>`;
+
+      html += `<td><div class="wv-chips">${cellContent}</div></td>`;
+    });
+
+    if (wvFreeOnly && !rowHasFree) return; // skip rows with no free slots
+    html += `</tr>`;
+  });
+
+  html += `</tbody>`;
+  document.getElementById('wvTable').innerHTML = html;
+}
+
+// ── START ──
+init();
+</script>
+</body>
+</html>

@@ -601,7 +601,18 @@
     padding: 5px 2px; border-bottom: 1px solid var(--border);
   }
   .freq-row:last-child { border-bottom: none; }
-  .freq-name { flex: 1; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .freq-name-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .freq-name { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .freq-override-note { font-size: 0.64rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+  .freq-override-clear {
+    border: none; background: none; padding: 0; font-family: inherit;
+    font-size: 0.64rem; color: var(--accent, #1a5c2e); cursor: pointer;
+    text-decoration: underline;
+  }
+  /* A pill set on a single shift rather than the clinician's usual cadence */
+  .bk-fn-pill.shift-only, .wv-chip-fn.shift-only {
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
+  }
   .freq-row-pill {
     font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em;
     background: rgba(0,0,0,0.1); padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
@@ -823,7 +834,12 @@
 
     <div class="modal-field" id="therapistFieldWrap">
       <label>Therapist / Specialist</label>
-      <select id="modalTherapist"></select>
+      <select id="modalTherapist" onchange="renderModalFreq()"></select>
+    </div>
+
+    <div class="modal-field">
+      <label>How often is this shift?</label>
+      <select id="modalFreq" onchange="onModalFreqChange(this.value)"></select>
     </div>
 
     <!-- AM / PM presets -->
@@ -924,7 +940,8 @@
 <div class="modal-bg" id="freqModalBg" onclick="if(event.target===this)closeFreqModal()">
   <div class="modal freq-modal">
     <h2>🔁 Visit Frequency</h2>
-    <div class="modal-meta">How often each clinician comes in. Weekly clinicians show no pill; anyone less frequent is marked on their bookings (e.g. <strong>2W</strong> = every 2 weeks).</div>
+    <div class="modal-meta">How often each clinician comes in, across all their shifts. Anyone less frequent than weekly is marked on their bookings (e.g. <strong>2W</strong> = every 2 weeks).<br>
+      For someone who is weekly on most days but not all, leave them weekly here and set the odd shift on its own — double-click that booking and change <em>How often is this shift?</em></div>
     <div class="freq-list" id="freqList"></div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeFreqModal()">Done</button>
@@ -1107,6 +1124,43 @@ function freqLabel(name) {
   const n = getFrequency(name);
   return n > 1 ? n + 'W' : '';
 }
+
+// ── PER-SHIFT FREQUENCY ──
+// A booking may carry its own `freq` (weeks between visits), for clinicians who
+// are in weekly for most shifts but fortnightly/monthly for one. With no `freq`
+// on the booking, the clinician's own frequency applies.
+function getBookingFreq(bk) {
+  return bk && bk.freq ? normaliseFreq(bk.freq) : getFrequency(bk ? bk.therapist : '');
+}
+function bookingFreqLabel(bk) {
+  const n = getBookingFreq(bk);
+  return n > 1 ? n + 'W' : '';
+}
+function bookingFreqTitle(bk) {
+  const n = getBookingFreq(bk);
+  return freqText(n) + (bk && bk.freq ? ' — this shift only' : '');
+}
+// How many shifts across the week carry their own frequency for this clinician
+function countShiftOverrides(name) {
+  let n = 0;
+  DAYS.forEach(d => {
+    const day = state.bookings[d] || {};
+    Object.keys(day).forEach(ri => {
+      (day[ri] || []).forEach(bk => { if (bk.therapist === name && bk.freq) n++; });
+    });
+  });
+  return n;
+}
+function clearShiftOverrides(name) {
+  DAYS.forEach(d => {
+    const day = state.bookings[d] || {};
+    Object.keys(day).forEach(ri => {
+      (day[ri] || []).forEach(bk => { if (bk.therapist === name) delete bk.freq; });
+    });
+  });
+  refreshFreqViews();
+  saveState();
+}
 // Long-form description used for tooltips and the editor
 function freqText(n) {
   n = normaliseFreq(n);
@@ -1154,8 +1208,14 @@ function renderFreqList() {
       ${g.members.map(name => {
         const n = getFrequency(name);
         const isPreset = FREQ_PRESETS.some(o => o.weeks === n);
+        const overrides = countShiftOverrides(name);
         return `<div class="freq-row">
-          <span class="freq-name">${name}</span>
+          <div class="freq-name-wrap">
+            <span class="freq-name">${name}</span>
+            ${overrides ? `<span class="freq-override-note">${overrides} shift${overrides > 1 ? 's' : ''} set individually
+              <button class="freq-override-clear" onclick="clearShiftOverrides('${escapeAttr(name)}')" title="Put every shift back on this frequency">reset</button>
+            </span>` : ''}
+          </div>
           ${n > 1 ? `<span class="freq-row-pill">${n}W</span>` : ''}
           <select class="freq-select" onchange="onFreqSelect('${escapeAttr(name)}', this.value)">
             ${FREQ_PRESETS.map(o => `<option value="${o.weeks}" ${o.weeks === n ? 'selected' : ''}>${o.label}</option>`).join('')}
@@ -1511,7 +1571,7 @@ function placeBookingElement(bk, bi, ri, slots, interval, allBks) {
   const leftVal = `calc(${leftPct}% + ${col === 0 ? 3 : GAP}px)`;
   const widthVal = `calc(${pct}% - ${col === 0 ? 3 + GAP : GAP * 2}px - ${col === total - 1 ? 3 : 0}px)`;
 
-  const fn = isFortnightly(bk.therapist);
+  const fn = getBookingFreq(bk) > 1;
   const el = document.createElement('div');
   el.className = `booking c${bk.colorIdx}${fn ? ' fortnightly' : ''}`;
   el.style.height = heightPx + 'px';
@@ -1523,7 +1583,7 @@ function placeBookingElement(bk, bi, ri, slots, interval, allBks) {
   el.innerHTML = `
     <div class="bk-top">
       <span class="bk-name">${bk.therapist}</span>
-      ${fn ? `<span class="bk-fn-pill" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>` : ''}
+      ${fn ? `<span class="bk-fn-pill${bk.freq ? ' shift-only' : ''}" title="${escapeHtml(bookingFreqTitle(bk))}">${bookingFreqLabel(bk)}</span>` : ''}
       <button class="bk-del" onclick="removeBooking(${ri},${bi})" title="Remove booking">✕</button>
     </div>
     <span class="bk-time" id="bktime-${ri}-${bi}">${formatTime(bk.start)} – ${formatTime(bk.end)}</span>
@@ -1650,7 +1710,7 @@ function onSlotDrop(e, ri, si, timeStr) {
     const newEnd = minToTime(timeToMin(newStart) + duration);
     state.bookings[day][dragData.fromRoom].splice(dragData.fromIdx, 1);
     if (!state.bookings[day][ri]) state.bookings[day][ri] = [];
-    state.bookings[day][ri].push({ therapist: bk.therapist, start: newStart, end: newEnd, colorIdx: bk.colorIdx });
+    state.bookings[day][ri].push({ ...bk, start: newStart, end: newEnd });
     dragData = null;
     renderBookings();
     updateAvailability();
@@ -1663,6 +1723,49 @@ function onSlotDblClick(ri, timeStr) {
 }
 
 // ── MODAL ──
+// '' = follow the clinician's own frequency; a number = this shift only
+let modalFreqValue = '';
+
+function currentModalTherapist() {
+  const wrap = document.getElementById('therapistFieldWrap');
+  if (wrap && wrap.style.display !== 'none') return document.getElementById('modalTherapist').value;
+  return pendingDrop ? pendingDrop.therapist : null;
+}
+function renderModalFreq() {
+  const sel = document.getElementById('modalFreq');
+  if (!sel) return;
+  const therapist = currentModalTherapist();
+  const def = getFrequency(therapist);
+  const cur = modalFreqValue === '' ? '' : normaliseFreq(modalFreqValue);
+  const defLabel = therapist
+    ? `Their usual — ${freqText(def).toLowerCase()}`
+    : `Clinician's usual frequency`;
+  let html = `<option value="" ${cur === '' ? 'selected' : ''}>${escapeHtml(defLabel)}</option>`;
+  html += FREQ_PRESETS.map(o =>
+    `<option value="${o.weeks}" ${cur === o.weeks ? 'selected' : ''}>This shift only: ${escapeHtml(o.label.toLowerCase())}</option>`
+  ).join('');
+  if (cur !== '' && !FREQ_PRESETS.some(o => o.weeks === cur)) {
+    html += `<option value="${cur}" selected>This shift only: ${escapeHtml(freqText(cur).toLowerCase())}</option>`;
+  }
+  html += `<option value="custom">This shift only: custom…</option>`;
+  sel.innerHTML = html;
+}
+function onModalFreqChange(value) {
+  if (value === 'custom') {
+    const therapist = currentModalTherapist();
+    const entered = prompt('How many weeks between this shift?\n(1 = weekly, 2 = fortnightly, 4 = monthly)',
+      modalFreqValue || getFrequency(therapist));
+    if (entered !== null) {
+      const n = Number(entered);
+      if (!isFinite(n) || n < 1 || n > 52) alert('Enter a whole number of weeks between 1 and 52.');
+      else modalFreqValue = normaliseFreq(n);
+    }
+  } else {
+    modalFreqValue = value === '' ? '' : normaliseFreq(value);
+  }
+  renderModalFreq();
+}
+
 function openModal(ri, timeStr, therapist, colorIdx, editIdx, dayOverride) {
   const day = dayOverride || state.activeDay;
   const isEdit = editIdx !== null && editIdx !== undefined;
@@ -1689,6 +1792,10 @@ function openModal(ri, timeStr, therapist, colorIdx, editIdx, dayOverride) {
       `<option value="${escapeAttr(t)}" ${currentTherapist === t ? 'selected' : ''}>${t}</option>`
     ).join('');
   }
+
+  // Shift frequency — an existing booking's own setting, otherwise the clinician's
+  modalFreqValue = (isEdit && existingBk.freq) ? normaliseFreq(existingBk.freq) : '';
+  renderModalFreq();
 
   // Quick duration buttons
   const quickDur = [30, 45, 60, 90, 120];
@@ -1741,7 +1848,7 @@ function closeModal() {
   document.getElementById('modalBg').classList.remove('open');
   document.getElementById('presetAM').classList.remove('active');
   document.getElementById('presetPM').classList.remove('active');
-  dragData = null; pendingDrop = null;
+  dragData = null; pendingDrop = null; modalFreqValue = '';
 }
 function confirmBooking() {
   if (!pendingDrop) return;
@@ -1761,10 +1868,13 @@ function confirmBooking() {
     colorIdx = getColor(therapist);
   }
 
+  const booking = { therapist, start, end, colorIdx };
+  if (modalFreqValue !== '') booking.freq = normaliseFreq(modalFreqValue);
+
   if (pendingDrop.editIdx !== null) {
-    state.bookings[day][ri][pendingDrop.editIdx] = { therapist, start, end, colorIdx };
+    state.bookings[day][ri][pendingDrop.editIdx] = booking;
   } else {
-    state.bookings[day][ri].push({ therapist, start, end, colorIdx });
+    state.bookings[day][ri].push(booking);
   }
   closeModal();
   if (activeFilter === 'gym') {
@@ -1910,7 +2020,7 @@ function exportCSV() {
   DAYS.forEach(d => {
     state.rooms.forEach((r,ri) => {
       (state.bookings[d][ri]||[]).forEach(bk => {
-        rows.push([d, r, bk.therapist, bk.start, bk.end, calcDuration(bk.start,bk.end), freqText(getFrequency(bk.therapist))]);
+        rows.push([d, r, bk.therapist, bk.start, bk.end, calcDuration(bk.start,bk.end), freqText(getBookingFreq(bk))]);
       });
     });
   });
@@ -2225,7 +2335,7 @@ function placeGymBooking(bk, bi, di, day, ri, slots, interval, allBks) {
   const leftVal  = `calc(${col*pct}% + ${col===0?3:GAP}px)`;
   const widthVal = `calc(${pct}% - ${col===0?3+GAP:GAP*2}px - ${col===total-1?3:0}px)`;
 
-  const fn = isFortnightly(bk.therapist);
+  const fn = getBookingFreq(bk) > 1;
   const el = document.createElement('div');
   el.className = `gym-booking c${bk.colorIdx}${fn?' fortnightly':''}`;
   el.style.cssText = `height:${heightPx}px;top:${topPx}px;left:${leftVal};width:${widthVal};right:auto;position:absolute;`;
@@ -2233,7 +2343,7 @@ function placeGymBooking(bk, bi, di, day, ri, slots, interval, allBks) {
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:4px;width:100%">
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bk.therapist}</span>
-      ${fn?`<span class="bk-fn-pill" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>`:''}
+      ${fn?`<span class="bk-fn-pill${bk.freq?' shift-only':''}" title="${escapeHtml(bookingFreqTitle(bk))}">${bookingFreqLabel(bk)}</span>`:''}
       <button class="gym-bk-del" onclick="removeGymBooking('${day}',${ri},${bi})">✕</button>
     </div>
     <span style="font-size:0.62rem;opacity:0.7;font-family:'DM Mono',monospace">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
@@ -2649,12 +2759,12 @@ function renderWeekView() {
       // Booking chips — hidden when Free-only mode is on
       if (bks.length && !wvFreeOnly) {
         cellContent += bks.map(bk => {
-          const fn = isFortnightly(bk.therapist);
+          const fn = getBookingFreq(bk) > 1;
           const firstName = bk.therapist.split(' ')[0];
           return `<div class="wv-chip c${bk.colorIdx}${fn?' fortnightly':''}">
             <span class="wv-chip-name">${firstName}</span>
             <span class="wv-chip-time">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
-            ${fn ? `<span class="wv-chip-fn" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>` : ''}
+            ${fn ? `<span class="wv-chip-fn${bk.freq ? ' shift-only' : ''}" title="${escapeHtml(bookingFreqTitle(bk))}">${bookingFreqLabel(bk)}</span>` : ''}
           </div>`;
         }).join('');
       }

@@ -11,8 +11,19 @@ number of weeks up to 52.
 
 Anyone who isn't weekly is marked with a pill (`2W`, `4W`, …) and a hatched
 overlay on their bookings in the day grid, gym view and week view, and their
-frequency is included in the CSV export. Settings are saved to `localStorage`
-along with the rest of the schedule.
+frequency is included in the CSV export.
+
+### Per-shift frequency
+
+Frequency can also be set on a single booking, for clinicians who are in weekly
+most days but fortnightly or monthly for one shift (and vice versa). Double-click
+the booking and change **How often is this shift?** — leave it on *Their usual* to
+follow the clinician's frequency, or pick a cadence that applies to that shift
+only. Shift-level pills carry a thin outline to distinguish them, and the
+frequency editor shows how many shifts a clinician has set individually, with a
+**reset** link to put them all back on their usual cadence.
+
+Settings are saved to `localStorage` along with the rest of the schedule.
 
 ## Hosting on Netlify
 

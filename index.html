@@ -562,12 +562,60 @@
     padding: 1px 5px; border-radius: 3px;
     flex-shrink: 0; text-transform: uppercase;
   }
-  /* Fortnightly badge pill in sidebar */
+  /* Visit-frequency pill in sidebar — click to edit */
   .badge-fn-pill {
     font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em;
     background: rgba(0,0,0,0.12); color: inherit;
     padding: 1px 5px; border-radius: 3px;
     text-transform: uppercase; flex-shrink: 0;
+    border: none; font-family: inherit; cursor: pointer;
+    transition: background .12s, opacity .12s;
+  }
+  .badge-fn-pill:hover { background: rgba(0,0,0,0.22); }
+  /* Weekly is the norm, so its pill stays quiet until the badge is hovered */
+  .badge-fn-pill.weekly { opacity: 0; background: rgba(0,0,0,0.08); }
+  .badge:hover .badge-fn-pill.weekly { opacity: .55; }
+  .badge-fn-pill.weekly:hover { opacity: 1; background: rgba(0,0,0,0.18); }
+
+  /* Sidebar button that opens the frequency editor */
+  .freq-open-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; margin-top: 8px; padding: 7px 10px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text);
+    font-family: inherit; font-size: 0.76rem; font-weight: 600;
+    cursor: pointer; transition: background .12s, border-color .12s;
+  }
+  .freq-open-btn:hover { background: var(--surface, #f5f3f0); border-color: var(--text-muted); }
+
+  /* Frequency editor modal */
+  .modal.freq-modal { width: min(520px, 92vw); }
+  .freq-list { max-height: 55vh; overflow-y: auto; margin: 10px 0 4px; padding-right: 4px; }
+  .freq-group { margin-bottom: 12px; }
+  .freq-group-label {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 2px 6px; color: var(--text-muted);
+  }
+  .freq-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 2px; border-bottom: 1px solid var(--border);
+  }
+  .freq-row:last-child { border-bottom: none; }
+  .freq-name { flex: 1; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .freq-row-pill {
+    font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em;
+    background: rgba(0,0,0,0.1); padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+  }
+  .freq-select {
+    flex-shrink: 0; width: 190px;
+    padding: 5px 8px; border-radius: 7px; border: 1.5px solid var(--border);
+    font-size: 0.76rem; font-family: inherit; background: var(--bg);
+    color: var(--text); outline: none; cursor: pointer;
+  }
+  .freq-select:focus { border-color: var(--text-muted); }
+  @media (max-width: 540px) {
+    .freq-row { flex-wrap: wrap; }
+    .freq-select { width: 100%; }
   }
   .booking:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.16); z-index: 20; }
   .booking:active { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); }
@@ -716,6 +764,9 @@
       <input type="text" id="newTherapistInput" placeholder="Add name…" onkeydown="if(event.key==='Enter')addTherapist()">
       <button onclick="addTherapist()" title="Add therapist">+</button>
     </div>
+    <button class="freq-open-btn" onclick="openFreqModal()" title="Set how often each clinician comes in">
+      🔁 <span>Visit Frequency</span>
+    </button>
 
     <div class="sidebar-divider"></div>
 
@@ -869,6 +920,18 @@
   </div>
 </div>
 
+<!-- VISIT FREQUENCY MODAL -->
+<div class="modal-bg" id="freqModalBg" onclick="if(event.target===this)closeFreqModal()">
+  <div class="modal freq-modal">
+    <h2>🔁 Visit Frequency</h2>
+    <div class="modal-meta">How often each clinician comes in. Weekly clinicians show no pill; anyone less frequent is marked on their bookings (e.g. <strong>2W</strong> = every 2 weeks).</div>
+    <div class="freq-list" id="freqList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeFreqModal()">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- UNDO BAR -->
 <div id="undoBar">
   <span id="undoMsg">Booking removed</span>
@@ -929,6 +992,7 @@ function saveState() {
       therapists:   state.therapists,
       bookings:     state.bookings,
       activeDay:    state.activeDay,
+      frequencies:  state.frequencies,
       groupClasses: GROUP_CLASSES,
     }));
     const openT  = document.getElementById('openTime');
@@ -951,6 +1015,7 @@ function loadState() {
       if (parsed.therapists)   state.therapists = parsed.therapists;
       if (parsed.bookings)     state.bookings   = parsed.bookings;
       if (parsed.activeDay)    state.activeDay  = parsed.activeDay;
+      if (parsed.frequencies)  state.frequencies = parsed.frequencies;
       if (parsed.groupClasses) {
         // Merge saved classes back into GROUP_CLASSES
         Object.keys(parsed.groupClasses).forEach(day => {
@@ -989,21 +1054,129 @@ let state = {
     'Monique Zorzanello','Nicola Addlem','Fiona Busuttil',
     'Lisa Godino','Matthew Evans','Karim Kantar'
   ],
-  bookings: {}
+  bookings: {},
+  // name → weeks between visits (1 = weekly). Seeded from DEFAULT_FREQUENCIES in init().
+  frequencies: {}
 };
 let undoStack = null;
 let undoTimer = null;
 let dragData = null;
 let pendingDrop = null;
 
-// ── FORTNIGHTLY THERAPISTS ──
-// Add names here to mark them as fortnightly
-const FORTNIGHTLY = new Set([
-  'Matthew Evans',
-  'Karim Kantar',
-]);
+// ── VISIT FREQUENCY ──
+// How often each clinician comes in, stored as the number of weeks between
+// visits: 1 = every week, 2 = fortnightly, 4 = monthly, etc. Anything not
+// listed defaults to weekly. Editable in the app via the "Visit Frequency"
+// button in the sidebar (or by clicking a clinician's frequency pill).
+const DEFAULT_FREQUENCIES = {
+  'Matthew Evans': 2,
+  'Karim Kantar':  2,
+};
 
-function isFortnightly(name) { return FORTNIGHTLY.has(name); }
+// Preset options offered in the frequency editor
+const FREQ_PRESETS = [
+  { weeks: 1,  label: 'Weekly' },
+  { weeks: 2,  label: 'Fortnightly (2 wks)' },
+  { weeks: 3,  label: 'Every 3 weeks' },
+  { weeks: 4,  label: 'Monthly (4 wks)' },
+  { weeks: 6,  label: 'Every 6 weeks' },
+  { weeks: 8,  label: 'Every 8 weeks' },
+  { weeks: 12, label: 'Quarterly (12 wks)' },
+];
+
+function normaliseFreq(v) {
+  const n = Math.round(Number(v));
+  if (!isFinite(n) || n < 1) return 1;
+  return Math.min(n, 52);
+}
+function getFrequency(name) {
+  const f = state.frequencies && state.frequencies[name];
+  return f ? normaliseFreq(f) : 1;
+}
+function setFrequency(name, weeks) {
+  const n = normaliseFreq(weeks);
+  if (n === 1) delete state.frequencies[name];
+  else state.frequencies[name] = n;
+  refreshFreqViews();
+  saveState();
+}
+// True for anyone who is NOT in every week
+function isFortnightly(name) { return getFrequency(name) > 1; }
+// Short pill text, e.g. "2W" — empty for weekly clinicians
+function freqLabel(name) {
+  const n = getFrequency(name);
+  return n > 1 ? n + 'W' : '';
+}
+// Long-form description used for tooltips and the editor
+function freqText(n) {
+  n = normaliseFreq(n);
+  if (n === 1) return 'Every week';
+  if (n === 2) return 'Every 2 weeks (fortnightly)';
+  if (n === 4) return 'Every 4 weeks (monthly)';
+  return 'Every ' + n + ' weeks';
+}
+function freqTitle(name) { return name + ' — ' + freqText(getFrequency(name)); }
+
+// Re-render everything that shows a frequency pill
+function refreshFreqViews() {
+  renderBadgePool();
+  if (activeFilter === 'gym')          buildGymView();
+  else if (activeFilter === 'gymutil') buildGymUtilView();
+  else if (activeFilter === 'classes') buildClassesView();
+  else buildGrid();
+  const wvBg = document.getElementById('wvBg');
+  if (wvBg && wvBg.classList.contains('open')) renderWeekView();
+  const freqBg = document.getElementById('freqModalBg');
+  if (freqBg && freqBg.classList.contains('open')) renderFreqList();
+}
+
+// ── FREQUENCY EDITOR MODAL ──
+function openFreqModal() {
+  renderFreqList();
+  document.getElementById('freqModalBg').classList.add('open');
+}
+function closeFreqModal() {
+  document.getElementById('freqModalBg').classList.remove('open');
+}
+function renderFreqList() {
+  const wrap = document.getElementById('freqList');
+  if (!wrap) return;
+  const professionMembers = new Set(PROFESSIONS.flatMap(p => p.members));
+  const groups = PROFESSIONS
+    .map(p => ({ label: p.label, colorIdx: p.colorIdx, members: p.members.filter(m => state.therapists.includes(m)) }))
+    .filter(g => g.members.length);
+  const extras = state.therapists.filter(t => !professionMembers.has(t));
+  if (extras.length) groups.push({ label: 'Other', colorIdx: null, members: extras });
+
+  wrap.innerHTML = groups.map(g => `
+    <div class="freq-group">
+      <div class="freq-group-label ${g.colorIdx !== null ? 'c' + g.colorIdx + '-label' : ''}">${g.label}</div>
+      ${g.members.map(name => {
+        const n = getFrequency(name);
+        const isPreset = FREQ_PRESETS.some(o => o.weeks === n);
+        return `<div class="freq-row">
+          <span class="freq-name">${name}</span>
+          ${n > 1 ? `<span class="freq-row-pill">${n}W</span>` : ''}
+          <select class="freq-select" onchange="onFreqSelect('${escapeAttr(name)}', this.value)">
+            ${FREQ_PRESETS.map(o => `<option value="${o.weeks}" ${o.weeks === n ? 'selected' : ''}>${o.label}</option>`).join('')}
+            ${!isPreset ? `<option value="${n}" selected>${freqText(n)}</option>` : ''}
+            <option value="custom">Custom…</option>
+          </select>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function onFreqSelect(name, value) {
+  if (value === 'custom') {
+    const entered = prompt(`How many weeks between visits for ${name}?\n(1 = weekly, 2 = fortnightly, 4 = monthly)`, getFrequency(name));
+    if (entered === null) { renderFreqList(); return; }
+    const n = Number(entered);
+    if (!isFinite(n) || n < 1 || n > 52) { alert('Enter a whole number of weeks between 1 and 52.'); renderFreqList(); return; }
+    setFrequency(name, n);
+    return;
+  }
+  setFrequency(name, value);
+}
 
 // ── PROFESSION MAP ──
 const PROFESSIONS = [
@@ -1048,8 +1221,27 @@ function initBookings() {
   });
 }
 
+function initFrequencies() {
+  if (!state.frequencies) state.frequencies = {};
+  // Seed the built-in defaults only when nothing has been saved yet, or when the
+  // saved state predates this feature — so a clinician moved back to weekly in
+  // the editor stays weekly on the next load.
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch(e) { /* storage unavailable */ }
+  if (!stored || !stored.frequencies) {
+    Object.keys(DEFAULT_FREQUENCIES).forEach(name => { state.frequencies[name] = DEFAULT_FREQUENCIES[name]; });
+  }
+  // Drop anything stale or invalid
+  Object.keys(state.frequencies).forEach(name => {
+    const n = normaliseFreq(state.frequencies[name]);
+    if (n === 1) delete state.frequencies[name];
+    else state.frequencies[name] = n;
+  });
+}
+
 function init() {
   loadState();
+  initFrequencies();
   initBookings();
   renderDayTabs();
   renderBadgePool();
@@ -1104,7 +1296,7 @@ function renderBadgePool() {
       html += `<div class="badge c${p.colorIdx}" draggable="true" ondragstart="onBadgeDragStart(event,'${escapeAttr(t)}',${p.colorIdx})">
         <span class="badge-icon">⠿</span>
         <span class="badge-name">${t}</span>
-        ${fn ? '<span class="badge-fn-pill">2W</span>' : ''}
+        <button class="badge-fn-pill${fn ? '' : ' weekly'}" onclick="openFreqModal()" title="${escapeHtml(freqTitle(t))} · click to change">${fn ? freqLabel(t) : '1W'}</button>
         <button class="badge-del" onclick="removeTherapist('${escapeAttr(t)}')" title="Remove">✕</button>
       </div>`;
     });
@@ -1122,7 +1314,7 @@ function renderBadgePool() {
       html += `<div class="badge c${c}" draggable="true" ondragstart="onBadgeDragStart(event,'${escapeAttr(t)}',${c})">
         <span class="badge-icon">⠿</span>
         <span class="badge-name">${t}</span>
-        ${fn ? '<span class="badge-fn-pill">2W</span>' : ''}
+        <button class="badge-fn-pill${fn ? '' : ' weekly'}" onclick="openFreqModal()" title="${escapeHtml(freqTitle(t))} · click to change">${fn ? freqLabel(t) : '1W'}</button>
         <button class="badge-del" onclick="removeTherapist('${escapeAttr(t)}')" title="Remove">✕</button>
       </div>`;
     });
@@ -1143,6 +1335,7 @@ function addTherapist() {
 }
 function removeTherapist(name) {
   state.therapists = state.therapists.filter(t => t !== name);
+  delete state.frequencies[name];
   renderBadgePool();
   saveState();
 }
@@ -1213,6 +1406,10 @@ function calcDuration(start, end) {
   return m ? `${h}h ${m}min` : `${h}h`;
 }
 function escapeAttr(s) { return s.replace(/'/g, "\\'"); }
+// For text placed inside a double-quoted HTML attribute (titles, labels)
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 function buildGrid() {
   initBookings();
@@ -1326,7 +1523,7 @@ function placeBookingElement(bk, bi, ri, slots, interval, allBks) {
   el.innerHTML = `
     <div class="bk-top">
       <span class="bk-name">${bk.therapist}</span>
-      ${fn ? '<span class="bk-fn-pill">2W</span>' : ''}
+      ${fn ? `<span class="bk-fn-pill" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>` : ''}
       <button class="bk-del" onclick="removeBooking(${ri},${bi})" title="Remove booking">✕</button>
     </div>
     <span class="bk-time" id="bktime-${ri}-${bi}">${formatTime(bk.start)} – ${formatTime(bk.end)}</span>
@@ -1709,11 +1906,11 @@ function clearDay() {
   renderBookings(); updateAvailability(); renderDayTabs();
 }
 function exportCSV() {
-  let rows = [['Day','Room','Therapist','Start','End','Duration']];
+  let rows = [['Day','Room','Therapist','Start','End','Duration','Frequency']];
   DAYS.forEach(d => {
     state.rooms.forEach((r,ri) => {
       (state.bookings[d][ri]||[]).forEach(bk => {
-        rows.push([d, r, bk.therapist, bk.start, bk.end, calcDuration(bk.start,bk.end)]);
+        rows.push([d, r, bk.therapist, bk.start, bk.end, calcDuration(bk.start,bk.end), freqText(getFrequency(bk.therapist))]);
       });
     });
   });
@@ -2036,7 +2233,7 @@ function placeGymBooking(bk, bi, di, day, ri, slots, interval, allBks) {
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:4px;width:100%">
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bk.therapist}</span>
-      ${fn?'<span class="bk-fn-pill">2W</span>':''}
+      ${fn?`<span class="bk-fn-pill" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>`:''}
       <button class="gym-bk-del" onclick="removeGymBooking('${day}',${ri},${bi})">✕</button>
     </div>
     <span style="font-size:0.62rem;opacity:0.7;font-family:'DM Mono',monospace">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
@@ -2457,7 +2654,7 @@ function renderWeekView() {
           return `<div class="wv-chip c${bk.colorIdx}${fn?' fortnightly':''}">
             <span class="wv-chip-name">${firstName}</span>
             <span class="wv-chip-time">${formatTime(bk.start)}–${formatTime(bk.end)}</span>
-            ${fn ? '<span class="wv-chip-fn">2W</span>' : ''}
+            ${fn ? `<span class="wv-chip-fn" title="${escapeHtml(freqText(getFrequency(bk.therapist)))}">${freqLabel(bk.therapist)}</span>` : ''}
           </div>`;
         }).join('');
       }
